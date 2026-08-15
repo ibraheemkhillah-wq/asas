@@ -68,6 +68,19 @@ const labels = {
 const label = (key) => labels[key] || key || '—';
 const badge = (key) => `<span class="badge ${esc(key)}">${esc(label(key))}</span>`;
 
+/** على شاشات الموبايل تتحول صفوف الجدول إلى بطاقات، فنضيف اسم كل عمود داخل الخلية */
+function labelTables(root = app) {
+  root.querySelectorAll('table').forEach((tableEl) => {
+    const headers = [...tableEl.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    tableEl.querySelectorAll('tbody tr').forEach((tr) => {
+      [...tr.children].forEach((td, index) => {
+        if (headers[index] && !td.dataset.label) td.dataset.label = headers[index];
+      });
+    });
+  });
+}
+new MutationObserver(() => labelTables()).observe(app, { childList: true, subtree: true });
+
 function table(columns, rows, renderRow) {
   if (!rows.length) return '<div class="empty">لا توجد بيانات</div>';
   return `<div class="table-wrap"><table>
@@ -512,6 +525,11 @@ document.getElementById('token-btn').onclick = () => {
   refreshStatus();
   render();
 };
+
+// تسجيل عامل الخدمة ليعمل التطبيق كأيقونة على شاشة الموبايل
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 
 refreshStatus();
 render();
