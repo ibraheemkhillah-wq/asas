@@ -33,7 +33,7 @@ const esc = (value) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
   );
 
-const money = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ₪`;
+const money = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ₺`;
 
 const fmtDate = (value) =>
   value

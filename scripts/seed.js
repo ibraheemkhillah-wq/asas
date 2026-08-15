@@ -45,7 +45,7 @@ const templates = [
     intent: 'موقع المكتب',
     sampleIn: 'وين مكتبكم؟',
     reply:
-      'مكتبنا الرئيسي في الخليل، ولدينا فرع في رام الله.\nأخبرني بالفرع الأقرب لك وسأرسل لك الموقع ومواعيد الدوام.',
+      'مكتبنا الرئيسي في تقسيم، ولدينا فرع في قاضي كوي، ونوفّر التسليم في مطار صبيحة كوكجن ومطار إسطنبول.\nأخبرني بالموقع الأقرب لك وسأرسل لك العنوان ومواعيد الدوام.',
     notes: null,
   },
 ];
@@ -62,7 +62,7 @@ for (const t of templates) {
   }
 }
 
-const demoPhone = '970599111222';
+const demoPhone = '905321114422';
 if (!get('SELECT id FROM conversations WHERE phone = ?', [demoPhone])) {
   recordInbound({
     phone: demoPhone,
