@@ -1,0 +1,159 @@
+{
+  "_readme": [
+    "ملف تعريف الربط مع eganis. انسخه إلى config/eganis.json ثم عدّل المسارات وأسماء الحقول",
+    "حسب توثيق حسابك (Broker Web Service / API). القيم أدناه أمثلة توضيحية فقط.",
+    "{{name}} تُستبدل تلقائياً بقيم الوسائط المرسلة من التطبيق."
+  ],
+
+  "auth": {
+    "path": "/api/auth/login",
+    "method": "POST",
+    "body": { "username": "{{username}}", "password": "{{password}}" },
+    "tokenPath": "data.token",
+    "ttlSeconds": 1800
+  },
+
+  "endpoints": {
+    "health": { "method": "GET", "path": "/api/ping" },
+
+    "listVehicles": {
+      "method": "GET",
+      "path": "/api/vehicles",
+      "query": { "status": "{{status}}", "branch": "{{branch}}", "search": "{{q}}" },
+      "resultPath": "data",
+      "map": "vehicle"
+    },
+    "listContracts": {
+      "method": "GET",
+      "path": "/api/contracts",
+      "query": { "status": "{{status}}", "date": "{{date}}", "search": "{{q}}" },
+      "resultPath": "data",
+      "map": "contract"
+    },
+    "getContract": {
+      "method": "GET",
+      "path": "/api/contracts/{{id}}",
+      "resultPath": "data",
+      "map": "contract"
+    },
+    "listBookings": {
+      "method": "GET",
+      "path": "/api/reservations",
+      "query": { "date": "{{date}}", "status": "{{status}}" },
+      "resultPath": "data",
+      "map": "booking"
+    },
+    "listTasks": {
+      "method": "GET",
+      "path": "/api/movements",
+      "query": { "date": "{{date}}", "type": "{{type}}" },
+      "resultPath": "data",
+      "map": "task"
+    },
+    "searchCustomers": {
+      "method": "GET",
+      "path": "/api/customers",
+      "query": { "search": "{{q}}" },
+      "resultPath": "data",
+      "map": "customer"
+    },
+
+    "extendContract": {
+      "method": "POST",
+      "path": "/api/contracts/{{id}}/extend",
+      "body": { "days": "{{days}}" },
+      "resultPath": "data",
+      "map": "contract"
+    },
+    "closeContract": {
+      "method": "POST",
+      "path": "/api/contracts/{{id}}/close",
+      "body": { "odometer": "{{odometer}}", "notes": "{{notes}}" },
+      "resultPath": "data",
+      "map": "contract"
+    },
+    "setVehicleStatus": {
+      "method": "POST",
+      "path": "/api/vehicles/{{id}}/status",
+      "body": { "status": "{{status}}", "note": "{{note}}" },
+      "resultPath": "data",
+      "map": "vehicle"
+    },
+    "assignTask": {
+      "method": "POST",
+      "path": "/api/movements/{{id}}/assign",
+      "body": { "driver": "{{driver}}" },
+      "resultPath": "data",
+      "map": "task"
+    },
+    "completeTask": {
+      "method": "POST",
+      "path": "/api/movements/{{id}}/complete",
+      "body": { "note": "{{note}}" },
+      "resultPath": "data",
+      "map": "task"
+    }
+  },
+
+  "maps": {
+    "vehicle": {
+      "id": "vehicleId",
+      "plate": "plateNumber",
+      "make": "brand",
+      "model": "modelName",
+      "year": "modelYear",
+      "group": "carGroup",
+      "status": "statusCode",
+      "branch": "branchName",
+      "odometer": "currentKm"
+    },
+    "contract": {
+      "id": "contractId",
+      "no": "contractNo",
+      "customerId": "customer.id",
+      "customerName": "customer.fullName",
+      "phone": "customer.mobile",
+      "vehicleId": "vehicle.id",
+      "plate": "vehicle.plateNumber",
+      "startAt": "startDate",
+      "endAt": "endDate",
+      "status": "statusCode",
+      "dailyRate": "dailyPrice",
+      "days": "totalDays",
+      "total": "totalAmount",
+      "paid": "paidAmount",
+      "balance": "remainingAmount",
+      "branchOut": "pickupBranch",
+      "branchIn": "returnBranch"
+    },
+    "booking": {
+      "id": "reservationId",
+      "no": "reservationNo",
+      "customerName": "customerName",
+      "phone": "mobile",
+      "group": "carGroup",
+      "pickupAt": "pickupDate",
+      "dropoffAt": "returnDate",
+      "branch": "pickupBranch",
+      "status": "statusCode"
+    },
+    "task": {
+      "id": "movementId",
+      "type": "movementType",
+      "at": "scheduledAt",
+      "ref": "referenceNo",
+      "plate": "plateNumber",
+      "location": "address",
+      "driver": "driverName",
+      "status": "statusCode"
+    },
+    "customer": {
+      "id": "customerId",
+      "name": "fullName",
+      "phone": "mobile",
+      "idNumber": "nationalId",
+      "license": "licenseNo",
+      "blacklisted": "isBlacklisted"
+    }
+  }
+}

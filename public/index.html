@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Call &amp; Rent — إدارة التشغيل</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🚗</span>
+        <div>
+          <strong>Call &amp; Rent</strong>
+          <small>إدارة عمليات التشغيل</small>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="status-pill" class="pill">…</span>
+        <button id="refresh-btn" class="btn ghost" type="button">تحديث</button>
+        <button id="token-btn" class="btn ghost" type="button">رمز الدخول</button>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-view="today">لوحة اليوم</button>
+      <button class="tab" data-view="contracts">العقود</button>
+      <button class="tab" data-view="fleet">الأسطول</button>
+      <button class="tab" data-view="inbox">واتساب</button>
+      <button class="tab" data-view="templates">الردود المدرَّبة</button>
+      <button class="tab" data-view="audit">سجل الأوامر</button>
+    </nav>
+
+    <main id="app"><div class="empty">جارِ التحميل…</div></main>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
