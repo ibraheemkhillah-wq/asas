@@ -178,6 +178,7 @@
       "total": "totalAmount",
       "paid": "paidAmount",
       "balance": "remainingAmount",
+      "currency": "currencyCode",
       "branchOut": "pickupBranch",
       "branchIn": "returnBranch"
     },
@@ -215,6 +216,7 @@
       "type": "entryType",
       "direction": "side",
       "amount": "amount",
+      "currency": "currencyCode",
       "ref": "contractNo",
       "note": "description",
       "occurredAt": "entryDate"

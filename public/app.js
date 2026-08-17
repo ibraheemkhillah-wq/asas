@@ -39,8 +39,24 @@ const esc = (value) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
   );
 
-const money = (n) =>
-  `<bdi dir="ltr">${Number(n || 0).toLocaleString('ar-EG')} ₺</bdi>`;
+const SYMBOL = { TRY: '₺', USD: '$' };
+const cur = (c) => (String(c || '').toUpperCase() === 'USD' ? 'USD' : 'TRY');
+
+const money = (n, currency = 'TRY') =>
+  `<bdi dir="ltr">${Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 })} ${
+    SYMBOL[cur(currency)]
+  }</bdi>`;
+
+/** «2,350 ₺ / 50 $» — العرض المزدوج المعتمد في كل الحسابات */
+const dualMoney = (amounts = {}, { hideZero = false } = {}) => {
+  const parts = [];
+  const t = Number(amounts.TRY || 0);
+  const u = Number(amounts.USD || 0);
+  if (!hideZero || t) parts.push(money(t, 'TRY'));
+  if (!hideZero || u) parts.push(money(u, 'USD'));
+  if (!parts.length) parts.push(money(0, 'TRY'));
+  return parts.join(' <span class="muted">/</span> ');
+};
 
 const fmtDate = (value) =>
   value
@@ -113,7 +129,11 @@ async function viewToday() {
       ${kpi(c.vehiclesAvailable, 'مركبات متاحة', c.vehiclesAvailable ? 'ok' : 'danger')}
       ${kpi(c.vehiclesRented, 'مركبات مؤجّرة')}
       ${kpi(c.vehiclesMaintenance, 'في الصيانة', c.vehiclesMaintenance ? 'warn' : '')}
-      ${kpi(money(c.unpaidBalance), 'رصيد غير محصّل', c.unpaidBalance ? 'warn' : 'ok')}
+      ${kpi(
+        dualMoney(c.unpaidBalance, { hideZero: true }),
+        'رصيد غير محصّل',
+        c.unpaidBalance.TRY || c.unpaidBalance.USD ? 'warn' : 'ok',
+      )}
     </div>
 
     ${
@@ -131,7 +151,7 @@ async function viewToday() {
         ${table(['العقد', 'العميل', 'اللوحة', 'الإرجاع', 'الرصيد'], data.overdue, (r) => `
           <tr>
             <td>${esc(r.no)}</td><td>${esc(r.customerName)}</td><td>${esc(r.plate)}</td>
-            <td>${fmtDate(r.endAt)}</td><td>${money(r.balance)}</td>
+            <td>${fmtDate(r.endAt)}</td><td>${money(r.balance, r.currency)}</td>
           </tr>`)}
       </div>
 
@@ -185,7 +205,7 @@ async function viewContracts() {
         <tr>
           <td>${esc(r.no)}</td><td>${esc(r.customerName)}</td><td>${esc(r.phone)}</td>
           <td>${esc(r.plate)}</td><td>${fmtDate(r.startAt)}</td><td>${fmtDate(r.endAt)}</td>
-          <td>${badge(r.status)}</td><td>${money(r.balance)}</td>
+          <td>${badge(r.status)}</td><td>${money(r.balance, r.currency)}</td>
           <td class="row">
             <button class="btn small" data-extend="${esc(r.no)}">تمديد</button>
             ${r.status !== 'closed' ? `<button class="btn small ghost" data-close="${esc(r.no)}">إغلاق</button>` : ''}
@@ -494,33 +514,86 @@ function renderChatMessage(m) {
 
 // ===== محاسبة المستأجرين =====
 
+/** شريط سعر الصرف — يُعرض فوق كل حساب مع مصدره ووقته */
+function fxChip(rate) {
+  if (!rate || !rate.rate) {
+    return `<span class="fx-chip warn">تعذّر جلب سعر الصرف${
+      rate?.error ? ` — ${esc(rate.error)}` : ''
+    }</span>`;
+  }
+  const age =
+    rate.ageMinutes > 0 ? `منذ ${rate.ageMinutes} دقيقة` : 'الآن';
+  return `<span class="fx-chip ${rate.stale ? 'warn' : ''}">
+      سعر الصرف: <bdi dir="ltr">1 $ = ${Number(rate.rate).toLocaleString('ar-EG', {
+        maximumFractionDigits: 4,
+      })} ₺</bdi>
+      <span class="muted">· ${esc(rate.source)} · ${esc(age)}</span>
+      <button class="btn small ghost" id="fx-refresh">تحديث</button>
+    </span>`;
+}
+
 async function viewAccounting() {
-  const balances = await api('/api/accounting/open-balances');
+  const [balances, rate] = await Promise.all([
+    api('/api/accounting/open-balances'),
+    api('/api/fx/rate').catch((err) => ({ error: err.message })),
+  ]);
 
   app.innerHTML = `
     <div class="toolbar">
       <input id="acc-q" placeholder="اكتب اسم العميل أو رقم هاتفه…" value="${esc(state.accountingQuery || '')}" />
       <button class="btn" id="acc-search">عرض الحساب</button>
     </div>
+    <div class="fx-bar">${fxChip(rate)}</div>
     <div id="acc-result"></div>
     <div class="card" style="margin-top:14px">
       <h2>حسابات غير مصفّاة</h2>
-      <p class="muted">العملاء الذين لهم رصيد عندنا أو عليهم مستحقات — اضغط أي اسم لفتح كشفه.</p>
-      ${table(['العميل', 'الهاتف', 'تأمينات محفوظة', 'الحالة', 'المبلغ'], balances, (b) => `
+      <p class="muted">العملاء الذين لهم رصيد عندنا أو عليهم مستحقات — اضغط أي اسم لفتح كشفه. كل مبلغ بعملته الأصلية.</p>
+      ${table(['العميل', 'الهاتف', 'تأمينات محفوظة', 'الحالة', 'المبلغ (ليرة / دولار)'], balances, (b) => `
         <tr class="clickable" data-open="${esc(b.customer.name)}">
           <td>${esc(b.customer.name)}</td>
           <td>${esc(b.customer.phone || '—')}</td>
-          <td>${money(b.depositsHeld)}</td>
+          <td>${dualMoney(b.depositsHeld, { hideZero: true })}</td>
           <td>${
-            b.status === 'company_owes'
-              ? '<span class="badge open">له عندنا</span>'
-              : '<span class="badge overdue">مطلوب منه</span>'
+            b.mixed
+              ? '<span class="badge pending">له وعليه</span>'
+              : b.status === 'company_owes'
+                ? '<span class="badge open">له عندنا</span>'
+                : '<span class="badge overdue">مطلوب منه</span>'
           }</td>
-          <td><strong>${money(b.status === 'company_owes' ? b.toRefund : b.toCollect)}</strong></td>
+          <td>${
+            b.mixed
+              ? `<div class="ok">له ${dualMoney(b.toRefund, { hideZero: true })}</div>
+                 <div class="danger">عليه ${dualMoney(b.toCollect, { hideZero: true })}</div>`
+              : `<strong>${dualMoney(
+                  b.status === 'company_owes' ? b.toRefund : b.toCollect,
+                  { hideZero: true },
+                )}</strong>`
+          }</td>
         </tr>`)}
     </div>`;
 
   const input = document.getElementById('acc-q');
+
+  /** إعادة رسم شريط السعر وحده دون إعادة بناء الصفحة */
+  function bindFxRefresh() {
+    const btn = document.getElementById('fx-refresh');
+    if (!btn) return;
+    btn.onclick = async () => {
+      const bar = document.querySelector('.fx-bar');
+      btn.disabled = true;
+      try {
+        const fresh = await api('/api/fx/rate?force=1');
+        bar.innerHTML = fxChip(fresh);
+        bindFxRefresh();
+        toast('تم تحديث سعر الصرف');
+        if (state.accountingQuery) await loadStatement(state.accountingQuery);
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+      }
+    };
+  }
+  bindFxRefresh();
 
   async function loadStatement(q) {
     state.accountingQuery = q;
@@ -539,7 +612,21 @@ async function viewAccounting() {
         ? { text: 'مستحق للعميل — نُعيده له', value: stmt.toRefund, cls: 'ok' }
         : stmt.status === 'customer_owes'
           ? { text: 'مطلوب من العميل — نطالبه به', value: stmt.toCollect, cls: 'danger' }
-          : { text: 'الحساب مصفّى', value: 0, cls: '' };
+          : { text: 'الحساب مصفّى', value: { TRY: 0, USD: 0 }, cls: '' };
+
+    // المكافئ الإجمالي بسعر اللحظة — للاطّلاع فقط، والأرصدة تبقى بعملتها
+    const sign = stmt.status === 'customer_owes' ? -1 : 1;
+    const equivalent =
+      stmt.combined && stmt.status !== 'settled'
+        ? `<div class="muted" style="margin-top:6px">${
+            stmt.mixed ? 'صافي الفرق' : 'أي ما يعادل'
+          } ${money(sign * stmt.combined.inTRY, 'TRY')} أو ${money(
+            sign * stmt.combined.inUSD,
+            'USD',
+          )}</div>`
+        : '';
+
+    const byCur = (field) => ({ TRY: stmt.byCurrency.TRY[field], USD: stmt.byCurrency.USD[field] });
 
     box.innerHTML = `
       <div class="card">
@@ -551,16 +638,28 @@ async function viewAccounting() {
             }</div>
           </div>
           <div style="text-align:center">
-            <div class="kpi-value ${headline.cls}">${money(headline.value)}</div>
-            <div class="kpi-label">${esc(headline.text)}</div>
+            ${
+              stmt.mixed
+                ? `<div class="kpi-value ok">${dualMoney(stmt.toRefund, { hideZero: true })}</div>
+                   <div class="kpi-label">مستحق له عندنا</div>
+                   <div class="kpi-value danger" style="margin-top:8px">${dualMoney(stmt.toCollect, { hideZero: true })}</div>
+                   <div class="kpi-label">مستحق علينا منه</div>`
+                : `<div class="kpi-value ${headline.cls}">${dualMoney(headline.value, {
+                    hideZero: stmt.status !== 'settled',
+                  })}</div>
+                   <div class="kpi-label">${esc(headline.text)}</div>`
+            }
+            ${equivalent}
           </div>
         </div>
 
         <div class="grid kpi" style="margin-top:14px">
-          <div class="card"><div class="kpi-value">${money(stmt.totals.depositsHeld)}</div><div class="kpi-label">تأمينات محفوظة</div></div>
-          <div class="card"><div class="kpi-value">${money(stmt.totals.credits)}</div><div class="kpi-label">إجمالي ما دفعه</div></div>
-          <div class="card"><div class="kpi-value">${money(stmt.totals.debits)}</div><div class="kpi-label">إجمالي المستحقات عليه</div></div>
-          <div class="card"><div class="kpi-value ${stmt.totals.damages ? 'warn' : ''}">${money(stmt.totals.damages)}</div><div class="kpi-label">تكاليف حوادث</div></div>
+          <div class="card"><div class="kpi-value">${dualMoney(byCur('depositsHeld'), { hideZero: true })}</div><div class="kpi-label">تأمينات محفوظة</div></div>
+          <div class="card"><div class="kpi-value">${dualMoney(byCur('credits'), { hideZero: true })}</div><div class="kpi-label">إجمالي ما دفعه</div></div>
+          <div class="card"><div class="kpi-value">${dualMoney(byCur('debits'), { hideZero: true })}</div><div class="kpi-label">إجمالي المستحقات عليه</div></div>
+          <div class="card"><div class="kpi-value ${
+            stmt.byCurrency.TRY.damages || stmt.byCurrency.USD.damages ? 'warn' : ''
+          }">${dualMoney(byCur('damages'), { hideZero: true })}</div><div class="kpi-label">تكاليف حوادث</div></div>
         </div>
 
         <div class="row" style="margin-top:14px">
@@ -573,14 +672,16 @@ async function viewAccounting() {
 
       <div class="card" style="margin-top:14px">
         <h2>تفاصيل الحركات</h2>
-        ${table(['التاريخ', 'الحركة', 'المرجع', 'له', 'عليه', 'الرصيد', ''], stmt.entries, (e) => `
+        <p class="muted">كل حركة مسجّلة بعملتها، والرصيد الجاري محسوب لكل عملة على حدة.</p>
+        ${table(['التاريخ', 'الحركة', 'المرجع', 'العملة', 'له', 'عليه', 'الرصيد', ''], stmt.entries, (e) => `
           <tr>
             <td>${esc(e.date)}</td>
             <td>${esc(e.label)}${e.note ? `<div class="muted" style="font-size:12px">${esc(e.note)}</div>` : ''}</td>
             <td>${esc(e.ref || '—')}</td>
-            <td>${e.credit ? money(e.credit) : '—'}</td>
-            <td>${e.debit ? money(e.debit) : '—'}</td>
-            <td><strong>${money(e.running)}</strong></td>
+            <td><span class="badge">${e.currency === 'USD' ? 'دولار' : 'ليرة'}</span></td>
+            <td>${e.credit ? money(e.credit, e.currency) : '—'}</td>
+            <td>${e.debit ? money(e.debit, e.currency) : '—'}</td>
+            <td><strong>${money(e.running, e.currency)}</strong></td>
             <td>${
               e.source === 'manual'
                 ? `<button class="btn small ghost" data-void="${e.id}">إلغاء</button>`
@@ -618,8 +719,12 @@ async function viewAccounting() {
     if (settleBtn) {
       settleBtn.onclick = async () => {
         const verb = stmt.status === 'company_owes' ? 'إعادة' : 'تحصيل';
-        const amount = stmt.status === 'company_owes' ? stmt.toRefund : stmt.toCollect;
-        if (!confirm(`تأكيد ${verb} مبلغ ${amount} ₺ وتصفية حساب ${stmt.customer.name}؟`)) return;
+        const amounts = stmt.status === 'company_owes' ? stmt.toRefund : stmt.toCollect;
+        const plain = ['TRY', 'USD']
+          .filter((c) => amounts[c])
+          .map((c) => `${amounts[c]} ${c === 'USD' ? '$' : '₺'}`)
+          .join(' و ');
+        if (!confirm(`تأكيد ${verb} مبلغ ${plain} وتصفية حساب ${stmt.customer.name}؟`)) return;
         try {
           await api('/api/accounting/settle', {
             method: 'POST',
@@ -651,7 +756,17 @@ async function viewAccounting() {
             .join('')}
         </select>
       </div>
-      <div class="field"><label>المبلغ (₺)</label><input id="e-amount" type="number" min="0" step="0.01" /></div>
+      <div class="row" style="gap:10px;align-items:flex-end">
+        <div class="field" style="flex:2"><label>المبلغ</label><input id="e-amount" type="number" min="0" step="0.01" /></div>
+        <div class="field" style="flex:1">
+          <label>العملة</label>
+          <select id="e-currency">
+            <option value="TRY">ليرة تركية ₺</option>
+            <option value="USD">دولار $</option>
+          </select>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:-4px">تُسجَّل الحركة بالعملة التي حدثت بها فعلاً — لا يجري أي تحويل عند الحفظ.</p>
       <div class="field"><label>المرجع (رقم عقد أو مركبة — اختياري)</label><input id="e-ref" /></div>
       <div class="field"><label>ملاحظة (اختياري)</label><input id="e-note" placeholder="مثال: إصلاح صدام أمامي بعد حادث" /></div>
       <div class="row">
@@ -674,6 +789,7 @@ async function viewAccounting() {
             phone: customer.phone,
             type: form.querySelector('#e-type').value,
             amount,
+            currency: form.querySelector('#e-currency').value,
             ref: form.querySelector('#e-ref').value.trim() || null,
             note: form.querySelector('#e-note').value.trim() || null,
           },

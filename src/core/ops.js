@@ -5,6 +5,7 @@
 import { eganis } from '../connectors/eganis/index.js';
 import { assertWritesAllowed } from '../config.js';
 import { record } from './audit.js';
+import * as fx from './fx.js';
 import { all, run } from '../db.js';
 
 const dayKey = (value) => new Date(value).toISOString().slice(0, 10);
@@ -35,12 +36,23 @@ export async function overview() {
     return acc;
   }, {});
 
+  // الأرصدة غير المحصّلة تُجمَع لكل عملة على حدة — لا تُخلط الليرة بالدولار
+  const unpaidByCurrency = { TRY: 0, USD: 0 };
+  for (const c of unpaid) {
+    unpaidByCurrency[fx.normalizeCurrency(c.currency)] += Number(c.balance || 0);
+  }
+  for (const key of Object.keys(unpaidByCurrency)) {
+    unpaidByCurrency[key] = Math.round(unpaidByCurrency[key] * 100) / 100;
+  }
+
   const alerts = [];
   if (overdue.length) alerts.push({ level: 'high', text: `${overdue.length} عقد متأخر عن موعد الإرجاع` });
   if (lateTasks.length) alerts.push({ level: 'high', text: `${lateTasks.length} مهمة تجاوزت وقتها` });
   if (unpaid.length) {
-    const sum = unpaid.reduce((s, c) => s + Number(c.balance || 0), 0);
-    alerts.push({ level: 'medium', text: `رصيد غير محصّل: ${sum} على ${unpaid.length} عقد` });
+    alerts.push({
+      level: 'medium',
+      text: `رصيد غير محصّل: ${fx.dual(unpaidByCurrency)} على ${unpaid.length} عقد`,
+    });
   }
   if ((fleet.available || 0) === 0) alerts.push({ level: 'high', text: 'لا توجد مركبات متاحة حالياً' });
 
@@ -55,7 +67,8 @@ export async function overview() {
       vehiclesAvailable: fleet.available || 0,
       vehiclesRented: fleet.rented || 0,
       vehiclesMaintenance: fleet.maintenance || 0,
-      unpaidBalance: unpaid.reduce((s, c) => s + Number(c.balance || 0), 0),
+      unpaidBalance: unpaidByCurrency,
+      unpaidBalanceText: fx.dual(unpaidByCurrency),
     },
     alerts,
     overdue,

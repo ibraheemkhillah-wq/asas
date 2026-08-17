@@ -18,6 +18,7 @@ import { eganis } from '../connectors/eganis/index.js';
 import { HttpError } from '../lib/http.js';
 import { assertWritesAllowed } from '../config.js';
 import { record } from './audit.js';
+import * as fx from './fx.js';
 
 export const ENTRY_TYPES = {
   deposit: { label: 'تأمين مستلم', direction: 'credit' },
@@ -82,6 +83,7 @@ async function eganisEntries(customer) {
       type: r.type || 'extra',
       direction: directionFor(r.type || 'extra', r.direction),
       amount: round2(r.amount || 0),
+      currency: fx.normalizeCurrency(r.currency),
       ref: r.ref || null,
       note: r.note || null,
       occurredAt: r.occurredAt || r.date || null,
@@ -96,12 +98,15 @@ async function eganisEntries(customer) {
 
   const entries = [];
   for (const c of mine) {
+    // عملة العقد كما هي في eganis — لا تحويل عند التسجيل
+    const currency = fx.normalizeCurrency(c.currency);
     if (Number(c.deposit) > 0) {
       entries.push({
         id: `eg-dep-${c.no}`,
         type: 'deposit',
         direction: 'credit',
         amount: round2(c.deposit),
+        currency,
         ref: c.no,
         note: `تأمين عقد ${c.no} — مركبة ${c.plate}`,
         occurredAt: c.startAt,
@@ -114,6 +119,7 @@ async function eganisEntries(customer) {
         type: 'rent_charge',
         direction: 'debit',
         amount: round2(c.total),
+        currency,
         ref: c.no,
         note: `أجرة ${c.days} أيام × ${c.dailyRate}`,
         occurredAt: c.startAt,
@@ -126,6 +132,7 @@ async function eganisEntries(customer) {
         type: 'payment',
         direction: 'credit',
         amount: round2(c.paid),
+        currency,
         ref: c.no,
         note: `دفعات على عقد ${c.no}`,
         occurredAt: c.startAt,
@@ -148,6 +155,7 @@ function manualEntries(customerId) {
     type: r.type,
     direction: r.direction,
     amount: round2(r.amount),
+    currency: fx.normalizeCurrency(r.currency),
     ref: r.ref,
     note: r.note,
     occurredAt: r.occurred_at,
@@ -170,62 +178,108 @@ export async function statement(query) {
     (a, b) => String(a.occurredAt).localeCompare(String(b.occurredAt)) || String(a.id).localeCompare(String(b.id)),
   );
 
-  let running = 0;
+  // رصيد جارٍ منفصل لكل عملة — لا نخلط الليرة بالدولار في الحساب نفسه
+  const running = { TRY: 0, USD: 0 };
   const entries = merged.map((e) => {
+    const currency = fx.normalizeCurrency(e.currency);
     const credit = e.direction === 'credit' ? e.amount : 0;
     const debit = e.direction === 'debit' ? e.amount : 0;
-    running = round2(running + credit - debit);
+    running[currency] = round2(running[currency] + credit - debit);
     return {
       ...e,
+      currency,
       label: typeLabel(e.type),
       date: dateOnly(e.occurredAt),
       credit,
       debit,
-      running,
+      running: running[currency],
+      runningAll: { ...running },
     };
   });
 
-  const sum = (predicate) =>
-    round2(entries.filter(predicate).reduce((total, e) => total + e.amount, 0));
+  const inCurrency = (currency, predicate = () => true) =>
+    entries.filter((e) => e.currency === currency && predicate(e));
 
-  const credits = round2(entries.reduce((t, e) => t + e.credit, 0));
-  const debits = round2(entries.reduce((t, e) => t + e.debit, 0));
-  const net = round2(credits - debits);
+  const sumOf = (currency, predicate) =>
+    round2(inCurrency(currency, predicate).reduce((total, e) => total + e.amount, 0));
 
-  const depositsIn = sum((e) => e.type === 'deposit');
-  const depositsBack = sum((e) => e.type === 'deposit_refund');
+  const byCurrency = {};
+  for (const currency of fx.CURRENCIES) {
+    const credits = round2(inCurrency(currency).reduce((t, e) => t + e.credit, 0));
+    const debits = round2(inCurrency(currency).reduce((t, e) => t + e.debit, 0));
+    const depositsIn = sumOf(currency, (e) => e.type === 'deposit');
+    const depositsBack = sumOf(currency, (e) => e.type === 'deposit_refund');
+    byCurrency[currency] = {
+      credits,
+      debits,
+      net: round2(credits - debits),
+      depositsIn,
+      depositsBack,
+      depositsHeld: round2(depositsIn - depositsBack),
+      rentCharges: sumOf(currency, (e) => e.type === 'rent_charge'),
+      damages: sumOf(currency, (e) => e.type === 'damage'),
+      fines: sumOf(currency, (e) => e.type === 'fine'),
+      payments: sumOf(currency, (e) => e.type === 'payment'),
+      entries: inCurrency(currency).length,
+    };
+  }
+
+  // سعر الصرف لحظة إعداد الكشف — للعرض المزدوج فقط، لا يغيّر الأرصدة الأصلية
+  let rate = null;
+  let rateError = null;
+  try {
+    rate = await fx.getRate();
+  } catch (err) {
+    rateError = err.message;
+  }
+
+  const netTry = byCurrency.TRY.net;
+  const netUsd = byCurrency.USD.net;
+  const combined = rate
+    ? {
+        inTRY: round2(netTry + fx.convert(netUsd, 'USD', 'TRY', rate.rate)),
+        inUSD: round2(fx.convert(netTry, 'TRY', 'USD', rate.rate) + netUsd),
+      }
+    : null;
+
+  // الحالة تُحسب على المكافئ الإجمالي، وإن تعذّر السعر فعلى العملتين معاً
+  const combinedNet = combined ? combined.inTRY : netTry + netUsd;
+  const status = combinedNet > 0.5 ? 'company_owes' : combinedNet < -0.5 ? 'customer_owes' : 'settled';
+
+  // حالة واقعية: له رصيد بالدولار وعليه مستحقات بالليرة في آن واحد
+  const mixed = (netTry > 0.005 && netUsd < -0.005) || (netTry < -0.005 && netUsd > 0.005);
 
   return {
     found: true,
     customer,
     candidates: candidates.filter((c) => c.id !== customer.id),
     entries,
-    totals: {
-      credits,
-      debits,
-      net,
-      depositsIn,
-      depositsBack,
-      depositsHeld: round2(depositsIn - depositsBack),
-      rentCharges: sum((e) => e.type === 'rent_charge'),
-      damages: sum((e) => e.type === 'damage'),
-      fines: sum((e) => e.type === 'fine'),
-      payments: sum((e) => e.type === 'payment'),
-    },
-    status: net > 0 ? 'company_owes' : net < 0 ? 'customer_owes' : 'settled',
-    /** المبلغ الذي نُعيده للعميل (إن وُجد) */
-    toRefund: net > 0 ? net : 0,
-    /** المبلغ الذي نطالب به العميل (إن وُجد) */
-    toCollect: net < 0 ? round2(-net) : 0,
-    currency: '₺',
+    byCurrency,
+    /** الأرصدة كما هي بعملتها الأصلية */
+    net: { TRY: netTry, USD: netUsd },
+    /** «2,350 ₺ / 50 $» */
+    netText: fx.dual({ TRY: netTry, USD: netUsd }),
+    fx: rate ? { ...rate, error: rateError } : { error: rateError },
+    combined,
+    status,
+    /** true عندما يكون له رصيد بعملة وعليه مستحقات بالعملة الأخرى */
+    mixed,
+    /** ما نُعيده للعميل بكل عملة */
+    toRefund: { TRY: netTry > 0 ? netTry : 0, USD: netUsd > 0 ? netUsd : 0 },
+    /** ما نطالبه به بكل عملة */
+    toCollect: { TRY: netTry < 0 ? round2(-netTry) : 0, USD: netUsd < 0 ? round2(-netUsd) : 0 },
     generatedAt: new Date().toISOString(),
   };
 }
 
-/** نص كشف الحساب جاهزاً للإرسال للعميل (واتساب أو نسخ) */
+/**
+ * نص كشف الحساب جاهزاً للإرسال للعميل (واتساب أو نسخ).
+ * كل مبلغ يظهر بعملته الأصلية، والخلاصة تظهر بالليرة والدولار معاً
+ * مع سعر الصرف المعتمد لحظة إعداد الكشف.
+ */
 export function statementText(stmt, { company = 'CALL & RENT' } = {}) {
   if (!stmt.found) return stmt.message;
-  const c = stmt.currency;
+
   const lines = [];
   lines.push(`*${company} — كشف حساب*`);
   lines.push(`العميل: ${stmt.customer.name}`);
@@ -233,20 +287,49 @@ export function statementText(stmt, { company = 'CALL & RENT' } = {}) {
   lines.push('');
   lines.push('*الحركات:*');
   for (const e of stmt.entries) {
-    const amount = e.credit ? `+${e.credit}` : `-${e.debit}`;
+    const sign = e.credit ? '+' : '−';
+    const amount = fx.fmt(e.credit || e.debit, e.currency);
     const ref = e.ref ? ` (${e.ref})` : '';
-    lines.push(`${e.date} · ${e.label}${ref}: ${amount} ${c}`);
+    lines.push(`${e.date} · ${e.label}${ref}: ${sign}${amount}`);
   }
   lines.push('');
-  lines.push(`إجمالي ما دفعه/تأميناته: ${stmt.totals.credits} ${c}`);
-  lines.push(`إجمالي المستحقات عليه: ${stmt.totals.debits} ${c}`);
+
+  // ملخّص لكل عملة استُخدمت فعلاً
+  const used = fx.CURRENCIES.filter((c) => stmt.byCurrency[c].entries > 0);
+  for (const c of used) {
+    const b = stmt.byCurrency[c];
+    lines.push(`*${fx.CURRENCY_NAME[c]}*`);
+    lines.push(`  ما دفعته وتأميناتك: ${fx.fmt(b.credits, c)}`);
+    lines.push(`  المستحقات عليك: ${fx.fmt(b.debits, c)}`);
+    lines.push(`  الرصيد: ${fx.fmt(b.net, c)}`);
+  }
   lines.push('');
-  if (stmt.status === 'company_owes') {
-    lines.push(`*الرصيد النهائي: ${stmt.toRefund} ${c} مستحقة لك ونحن جاهزون لإعادتها.*`);
+
+  const dualNonZero = (amounts) =>
+    fx.CURRENCIES.filter((c) => Math.abs(amounts[c]) > 0.005)
+      .map((c) => fx.fmt(amounts[c], c))
+      .join(' و ');
+
+  if (stmt.mixed) {
+    // رصيد بعملة ومستحقات بالعملة الأخرى — يُعرضان معاً بلا دمج
+    lines.push(`*مستحق لك: ${dualNonZero(stmt.toRefund)}*`);
+    lines.push(`*مستحق علينا منك: ${dualNonZero(stmt.toCollect)}*`);
+  } else if (stmt.status === 'company_owes') {
+    lines.push(`*الرصيد النهائي: ${dualNonZero(stmt.toRefund)} مستحقة لك ونحن جاهزون لإعادتها.*`);
   } else if (stmt.status === 'customer_owes') {
-    lines.push(`*الرصيد النهائي: ${stmt.toCollect} ${c} مستحقة علينا منك.*`);
+    lines.push(`*الرصيد النهائي: ${dualNonZero(stmt.toCollect)} مستحقة علينا منك.*`);
   } else {
     lines.push('*الرصيد النهائي: صفر — الحساب مصفّى بالكامل.*');
+  }
+
+  if (stmt.combined && stmt.fx?.rate) {
+    const equivalent =
+      stmt.status === 'customer_owes'
+        ? { TRY: round2(-stmt.combined.inTRY), USD: round2(-stmt.combined.inUSD) }
+        : { TRY: stmt.combined.inTRY, USD: stmt.combined.inUSD };
+    const label = stmt.mixed ? 'صافي الفرق بعد التحويل' : 'المكافئ الإجمالي';
+    lines.push(`${label}: ${fx.fmt(equivalent.TRY, 'TRY')} أو ${fx.fmt(equivalent.USD, 'USD')}`);
+    lines.push(`سعر الصرف المعتمد: 1 $ = ${fx.fmt(stmt.fx.rate, 'TRY')} — ${stmt.fx.source}`);
   }
   return lines.join('\n');
 }
@@ -260,6 +343,7 @@ export function addEntry(input, actor = 'dashboard') {
     phone = null,
     type,
     amount,
+    currency = 'TRY',
     direction,
     ref = null,
     note = null,
@@ -272,15 +356,20 @@ export function addEntry(input, actor = 'dashboard') {
   }
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) throw new HttpError(400, 'المبلغ يجب أن يكون رقماً أكبر من صفر');
+  if (!fx.isCurrency(currency)) {
+    throw new HttpError(400, `عملة غير مدعومة: ${currency}. المسموح: ${fx.CURRENCIES.join(' أو ')}`);
+  }
+  // الحركة تُسجَّل بعملتها كما حدثت — التحويل للعرض فقط
+  const cur = fx.normalizeCurrency(currency);
 
   const dir = directionFor(type, direction);
   const when = occurredAt || new Date().toISOString();
 
   run(
     `INSERT INTO ledger_entries
-       (customer_id, customer_name, phone, type, direction, amount, ref, note, occurred_at, source, author)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)`,
-    [String(customerId), customerName, phone, type, dir, round2(value), ref, note, when, actor],
+       (customer_id, customer_name, phone, type, direction, amount, currency, ref, note, occurred_at, source, author)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)`,
+    [String(customerId), customerName, phone, type, dir, round2(value), cur, ref, note, when, actor],
   );
 
   const created = get('SELECT * FROM ledger_entries WHERE id = last_insert_rowid()');
@@ -288,7 +377,7 @@ export function addEntry(input, actor = 'dashboard') {
     actor,
     action: 'ledger_add_entry',
     target: String(customerId),
-    payload: { type, amount: round2(value), direction: dir, ref },
+    payload: { type, amount: round2(value), currency: cur, direction: dir, ref },
     result: { id: created.id },
   });
   return created;
@@ -305,47 +394,90 @@ export function voidEntry(id, actor = 'dashboard') {
 }
 
 /**
- * تصفية حساب العميل: تسجّل الحركة المقابلة للرصيد الحالي فيصبح صفراً.
- * إن كان الرصيد لصالح العميل تُسجَّل كإعادة مبلغ له، وإن كان عليه تُسجَّل كتحصيل منه.
+ * تصفية حساب العميل: تُسجَّل حركة مقابلة لرصيد كل عملة فيصبح صفراً.
+ * رصيد الليرة يُصفّى بحركة بالليرة، ورصيد الدولار بحركة بالدولار — لا خلط بينهما.
+ *
+ * @param {object} options
+ *   currency : تصفية عملة واحدة فقط (TRY أو USD)، والافتراضي كل العملات
+ *   payIn    : العملة التي استُلم/دُفع بها فعلياً — تُذكر في الملاحظة مع
+ *              مكافئها بسعر اللحظة، مع بقاء الحركة بعملة الرصيد الأصلية
  */
-export async function settle(query, { note = null, method = 'نقداً' } = {}, actor = 'dashboard') {
+export async function settle(
+  query,
+  { note = null, method = 'نقداً', currency = null, payIn = null } = {},
+  actor = 'dashboard',
+) {
   assertWritesAllowed();
   const stmt = await statement(query);
   if (!stmt.found) throw new HttpError(404, stmt.message);
-  if (stmt.status === 'settled') {
+
+  const only = currency ? fx.normalizeCurrency(currency, null) : null;
+  if (currency && !only) throw new HttpError(400, `عملة غير مدعومة: ${currency}`);
+
+  const targets = fx.CURRENCIES.filter(
+    (c) => (!only || c === only) && Math.abs(stmt.net[c]) > 0.005,
+  );
+  if (!targets.length) {
     return { ok: true, alreadySettled: true, statement: stmt };
   }
 
-  const direction = stmt.status === 'company_owes' ? 'debit' : 'credit';
-  const amount = stmt.status === 'company_owes' ? stmt.toRefund : stmt.toCollect;
-  const label =
-    stmt.status === 'company_owes'
+  const cash = payIn ? fx.normalizeCurrency(payIn, null) : null;
+  if (payIn && !cash) throw new HttpError(400, `عملة غير مدعومة: ${payIn}`);
+  const settled = [];
+
+  for (const c of targets) {
+    const net = stmt.net[c];
+    const owedToCustomer = net > 0;
+    const amount = round2(Math.abs(net));
+    const base = owedToCustomer
       ? `إعادة رصيد للعميل (${method})`
       : `تحصيل مستحقات من العميل (${method})`;
 
-  addEntry(
-    {
-      customerId: stmt.customer.id,
-      customerName: stmt.customer.name,
-      phone: stmt.customer.phone,
-      type: 'settlement',
-      direction,
-      amount,
-      note: note ? `${label} — ${note}` : label,
-      occurredAt: new Date().toISOString(),
-    },
-    actor,
-  );
+    // الدفع بعملة أخرى: الحركة تبقى بعملة الرصيد، والملاحظة توثّق المبلغ المستلم فعلاً
+    let label = base;
+    if (cash && cash !== c && stmt.fx?.rate) {
+      label += ` — ${owedToCustomer ? 'سُلّم' : 'استُلم'} ${fx.fmt(
+        fx.convert(amount, c, cash, stmt.fx.rate),
+        cash,
+      )} بسعر ${fx.fmt(stmt.fx.rate, 'TRY')} للدولار`;
+    }
+
+    addEntry(
+      {
+        customerId: stmt.customer.id,
+        customerName: stmt.customer.name,
+        phone: stmt.customer.phone,
+        type: 'settlement',
+        direction: owedToCustomer ? 'debit' : 'credit',
+        amount,
+        currency: c,
+        note: note ? `${label} — ${note}` : label,
+        occurredAt: new Date().toISOString(),
+      },
+      actor,
+    );
+
+    settled.push({ currency: c, amount, direction: owedToCustomer ? 'debit' : 'credit' });
+  }
 
   record({
     actor,
     action: 'ledger_settle',
     target: stmt.customer.id,
-    payload: { amount, direction, method },
+    payload: { settled, method, payIn: cash },
   });
 
   const after = await statement(stmt.customer.id);
-  return { ok: true, settledAmount: amount, direction, statement: after };
+  const settledAmount = { TRY: 0, USD: 0 };
+  for (const s of settled) settledAmount[s.currency] = s.amount;
+
+  return {
+    ok: true,
+    settled,
+    settledAmount,
+    settledText: fx.dual(settledAmount),
+    statement: after,
+  };
 }
 
 /** قائمة العملاء الذين لهم أو عليهم رصيد — لمتابعة المطالبات والإرجاعات */
@@ -358,12 +490,20 @@ export async function openBalances() {
     if (!stmt.found || stmt.status === 'settled') continue;
     rows.push({
       customer: stmt.customer,
-      net: stmt.totals.net,
+      net: stmt.net,
+      netText: stmt.netText,
+      combined: stmt.combined,
       status: stmt.status,
+      mixed: stmt.mixed,
       toRefund: stmt.toRefund,
       toCollect: stmt.toCollect,
-      depositsHeld: stmt.totals.depositsHeld,
+      depositsHeld: {
+        TRY: stmt.byCurrency.TRY.depositsHeld,
+        USD: stmt.byCurrency.USD.depositsHeld,
+      },
     });
   }
-  return rows.sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  // الترتيب حسب حجم الرصيد بمكافئه بالليرة ليجتمع العملاء بالعملتين في قائمة واحدة
+  const weight = (r) => Math.abs(r.combined ? r.combined.inTRY : r.net.TRY + r.net.USD);
+  return rows.sort((a, b) => weight(b) - weight(a));
 }

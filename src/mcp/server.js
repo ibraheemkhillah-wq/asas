@@ -255,28 +255,51 @@ const tools = [
         customerName: str('اسم العميل'),
         phone: str('هاتف العميل'),
         type: str('نوع الحركة'),
-        amount: num('المبلغ بالليرة'),
+        amount: num('المبلغ بعملته'),
+        currency: str('عملة الحركة: TRY أو USD — سجّلها كما حدثت فعلاً بلا تحويل'),
         ref: str('رقم العقد أو المرجع'),
         note: str('وصف الحركة'),
       },
-      required: ['customerId', 'type', 'amount'],
+      required: ['customerId', 'type', 'amount', 'currency'],
     },
     run: (args) => api('POST', '/api/accounting/entries', { body: args }),
   },
   {
     name: 'settle_customer',
     description:
-      'تصفية حساب عميل: تسجّل إعادة الرصيد له أو تحصيل المستحقات منه فيصبح الحساب صفراً. استخدمه بعد تأكيد المستخدم.',
+      'تصفية حساب عميل: تسجّل إعادة الرصيد له أو تحصيل المستحقات منه فيصبح الحساب صفراً. تُصفّى الليرة والدولار كلٌّ على حدة. استخدمه بعد تأكيد المستخدم.',
     inputSchema: {
       type: 'object',
       properties: {
         q: str('اسم العميل أو هاتفه'),
         method: str('طريقة التسوية: نقداً / حوالة / خصم'),
+        currency: str('تصفية عملة واحدة فقط: TRY أو USD (الافتراضي: كل العملات)'),
+        payIn: str('العملة المستلمة/المدفوعة فعلياً إن اختلفت عن عملة الرصيد'),
         note: str('ملاحظة'),
       },
       required: ['q'],
     },
     run: (args) => api('POST', '/api/accounting/settle', { body: args }),
+  },
+  {
+    name: 'fx_rate',
+    description:
+      'سعر صرف الدولار مقابل الليرة التركية الآن مع مصدره ووقته (البنك المركزي التركي ثم مصادر احتياطية).',
+    inputSchema: {
+      type: 'object',
+      properties: { force: { type: 'boolean', description: 'تجاهل السعر المخزّن وجلب سعر جديد' } },
+    },
+    run: (args) => api('GET', '/api/fx/rate', { query: args.force ? { force: '1' } : {} }),
+  },
+  {
+    name: 'fx_set_rate',
+    description: 'اعتماد سعر صرف من الشركة يدوياً (كم ليرة للدولار الواحد).',
+    inputSchema: {
+      type: 'object',
+      properties: { rate: num('كم ليرة للدولار') },
+      required: ['rate'],
+    },
+    run: (args) => api('POST', '/api/fx/manual-rate', { body: args }),
   },
   {
     name: 'send_statement',

@@ -59,6 +59,15 @@ export const config = {
     graphVersion: process.env.WA_GRAPH_VERSION || 'v21.0',
   },
 
+  fx: {
+    // live = جلب السعر من المصادر · manual = اعتماد سعر الشركة الثابت
+    mode: process.env.FX_MODE || 'live',
+    manualRate: process.env.FX_USD_TRY || '',
+    ttlMinutes: Number(process.env.FX_TTL_MINUTES || 15),
+    // الحقل المعتمد من بيانات البنك المركزي التركي
+    tcmbField: process.env.FX_TCMB_FIELD || 'ForexSelling',
+  },
+
   ai: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
     model: process.env.ANTHROPIC_MODEL || 'claude-opus-5',

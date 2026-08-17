@@ -88,18 +88,21 @@ const ledgerSeed = [
     phone: '905337778899',
     type: 'damage',
     amount: 4200,
+    currency: 'TRY',
     ref: 'CR-2042',
-    note: 'حادث: إصلاح الصدام الأمامي والمصباح الأيسر — فاتورة الورشة 4200',
+    note: 'حادث: إصلاح الصدام الأمامي والمصباح الأيسر — فاتورة الورشة 4200 ₺',
     occurredAt: daysAgo(2),
   },
   {
+    // عقد CR-2040 بالدولار، فالإعادة تُسجَّل بالدولار أيضاً
     customerId: 'C-501',
     customerName: 'أحمد نصار',
     phone: '905321114422',
     type: 'deposit_refund',
-    amount: 2500,
+    amount: 150,
+    currency: 'USD',
     ref: 'CR-2040',
-    note: 'إعادة تأمين العقد السابق نقداً',
+    note: 'إعادة جزء من تأمين العقد السابق نقداً بالدولار',
     occurredAt: daysAgo(12),
   },
   {
@@ -108,8 +111,9 @@ const ledgerSeed = [
     phone: '905445556677',
     type: 'fine',
     amount: 320,
+    currency: 'TRY',
     ref: 'CR-2043',
-    note: 'مخالفة سرعة — جسر الفاتح',
+    note: 'مخالفة سرعة — جسر الفاتح (تُحصَّل بالليرة)',
     occurredAt: daysAgo(1),
   },
 ];
@@ -117,8 +121,8 @@ const ledgerSeed = [
 let ledgerAdded = 0;
 for (const entry of ledgerSeed) {
   const exists = get(
-    'SELECT id FROM ledger_entries WHERE customer_id = ? AND type = ? AND amount = ?',
-    [entry.customerId, entry.type, entry.amount],
+    'SELECT id FROM ledger_entries WHERE customer_id = ? AND type = ? AND amount = ? AND currency = ?',
+    [entry.customerId, entry.type, entry.amount, entry.currency],
   );
   if (!exists) {
     addEntry(entry, 'seed');

@@ -141,6 +141,9 @@ main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 .kpi-value.warn { color: var(--warn); }
 .kpi-value.danger { color: var(--danger); }
 .kpi-value.ok { color: var(--ok); }
+td .ok, td .danger { font-weight: 600; }
+td .ok { color: var(--ok); }
+td .danger { color: var(--danger); }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); }
@@ -166,6 +169,23 @@ tbody tr:hover { background: var(--surface-2); }
 .alert.medium { background: rgba(154, 98, 6, .14); color: var(--warn); }
 
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+
+/* شريط سعر الصرف فوق الحسابات */
+.fx-bar { margin-bottom: 14px; }
+.fx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+.fx-chip .muted { font-weight: 400; }
+.fx-chip.warn { border-color: var(--warn); color: var(--warn); }
 input, select, textarea {
   font-family: inherit;
   font-size: 14px;

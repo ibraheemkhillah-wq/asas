@@ -33,22 +33,28 @@ const state = {
     {
       id: 'K-2041', no: 'CR-2041', customerId: 'C-501', customerName: 'أحمد نصار', phone: '905321114422',
       vehicleId: 'V-1001', plate: '1234-567', startAt: at(-4, 10), endAt: at(0, 18), status: 'open',
-      dailyRate: 120, days: 4, total: 480, paid: 300, balance: 180, deposit: 3000, branchOut: 'تقسيم', branchIn: 'تقسيم',
+      dailyRate: 120, days: 4, total: 480, paid: 300, balance: 180, deposit: 3000, currency: 'TRY',
+      branchOut: 'تقسيم', branchIn: 'تقسيم',
     },
     {
       id: 'K-2042', no: 'CR-2042', customerId: 'C-502', customerName: 'سامي عودة', phone: '905337778899',
       vehicleId: 'V-1003', plate: '3456-789', startAt: at(-9, 12), endAt: at(-1, 12), status: 'overdue',
-      dailyRate: 150, days: 8, total: 1200, paid: 600, balance: 600, deposit: 3000, branchOut: 'قاضي كوي', branchIn: 'قاضي كوي',
+      dailyRate: 150, days: 8, total: 1200, paid: 600, balance: 600, deposit: 3000, currency: 'TRY',
+      branchOut: 'قاضي كوي', branchIn: 'قاضي كوي',
     },
     {
+      // عقد محاسَب بالدولار — بعض العملاء يتعاملون بالدولار بالكامل
       id: 'K-2043', no: 'CR-2043', customerId: 'C-503', customerName: 'ليلى حجازي', phone: '905445556677',
       vehicleId: 'V-1006', plate: '6789-012', startAt: at(-1, 9), endAt: at(5, 9), status: 'open',
-      dailyRate: 210, days: 6, total: 1260, paid: 1260, balance: 0, deposit: 2000, branchOut: 'تقسيم', branchIn: 'تقسيم',
+      dailyRate: 60, days: 6, total: 360, paid: 360, balance: 0, deposit: 150, currency: 'USD',
+      branchOut: 'تقسيم', branchIn: 'تقسيم',
     },
     {
+      // العميل نفسه (أحمد) له عقد بالليرة وآخر بالدولار
       id: 'K-2040', no: 'CR-2040', customerId: 'C-501', customerName: 'أحمد نصار', phone: '905321114422',
       vehicleId: 'V-1002', plate: '2345-678', startAt: at(-20, 10), endAt: at(-14, 10), status: 'closed',
-      dailyRate: 110, days: 6, total: 660, paid: 660, balance: 0, deposit: 2500, branchOut: 'تقسيم', branchIn: 'تقسيم',
+      dailyRate: 35, days: 6, total: 210, paid: 210, balance: 0, deposit: 200, currency: 'USD',
+      branchOut: 'تقسيم', branchIn: 'تقسيم',
     },
   ],
   bookings: [
@@ -274,9 +280,10 @@ export function createMockDriver() {
       if (doc.contractNo) {
         const c = state.contracts.find((x) => x.no === doc.contractNo);
         if (c) {
+          const sym = c.currency === 'USD' ? '$' : '₺';
           details.push(`العميل: ${c.customerName}`, `المركبة: ${c.plate}`,
             `من ${String(c.startAt).slice(0, 10)} إلى ${String(c.endAt).slice(0, 10)}`,
-            `الأجرة اليومية: ${c.dailyRate} ₺ · التأمين: ${c.deposit || 0} ₺`);
+            `الأجرة اليومية: ${c.dailyRate} ${sym} · التأمين: ${c.deposit || 0} ${sym}`);
         }
       } else if (doc.plate) {
         const v = state.vehicles.find((x) => x.plate === doc.plate);

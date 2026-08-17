@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(id DESC);
 
+-- أسعار الصرف المحفوظة (دولار/ليرة) مع مصدر كل سعر ووقته
+CREATE TABLE IF NOT EXISTS fx_rates (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  pair       TEXT NOT NULL DEFAULT 'USD/TRY',
+  rate       REAL NOT NULL,
+  source     TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- المحادثة المباشرة بين المستخدم والمساعد (Claude)
 CREATE TABLE IF NOT EXISTS assistant_messages (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,6 +128,16 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS idx_notes_ref ON notes(ref_type, ref_id);
 `);
+
+/** ترقيات بسيطة للمخطط تعمل على قواعد بيانات أُنشئت قبل إضافة الأعمدة */
+function addColumnIfMissing(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+addColumnIfMissing('ledger_entries', 'currency', "TEXT NOT NULL DEFAULT 'TRY'");
 
 export function all(sql, params = []) {
   return db.prepare(sql).all(...params);

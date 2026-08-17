@@ -12,6 +12,7 @@ import { all, run } from '../db.js';
 import { eganis } from '../connectors/eganis/index.js';
 import * as ops from '../core/ops.js';
 import * as accounting from '../core/accounting.js';
+import * as fx from '../core/fx.js';
 import * as files from '../core/files.js';
 
 let client = null;
@@ -113,12 +114,23 @@ export function buildTools(session) {
           customerName: str('اسمه'),
           type: str('نوع الحركة'),
           amount: num('المبلغ'),
+          currency: str('عملة الحركة: TRY أو USD — سجّلها بالعملة التي حدثت بها فعلاً'),
           ref: str('المرجع'),
           note: str('الوصف'),
         },
-        required: ['customerId', 'type', 'amount'],
+        required: ['customerId', 'type', 'amount', 'currency'],
       },
       run: (a) => accounting.addEntry(a, 'assistant'),
+    },
+    {
+      name: 'fx_rate',
+      description:
+        'سعر صرف الدولار مقابل الليرة التركية الآن (البنك المركزي التركي ثم مصادر احتياطية). استخدمه عند الحاجة لعرض مبلغ بالعملتين.',
+      input_schema: {
+        type: 'object',
+        properties: { force: { type: 'boolean', description: 'تجاهل السعر المخزّن وجلب سعر جديد' } },
+      },
+      run: (a) => fx.getRate({ force: a.force === true }),
     },
     {
       name: 'list_documents',
@@ -219,6 +231,13 @@ const SYSTEM_PROMPT = `أنت مساعد التشغيل في شركة CALL & REN
 - ابدأ بالجواب المباشر ثم التفاصيل. الأرقام في جدول أو نقاط قصيرة عند تعدّدها.
 - عند طلب مستند أو صورة: ابحث بـ list_documents ثم أرسِل الملفات فعلياً بـ send_files، ولا تكتفِ بذكر وجودها.
 - عند سؤال عن حساب عميل: استخدم customer_statement واذكر الرقم النهائي أولاً (كم له أو كم عليه).
+
+## العملات
+الشركة تتعامل بالليرة التركية والدولار معاً، وبعض العملاء لهم أرصدة بالعملتين في آن واحد.
+- كل مبلغ يبقى بعملته الأصلية في الدفتر؛ لا تحوّل عند التسجيل.
+- عند عرض أي حساب اذكره بالعملتين بالصيغة «2,350 ₺ / 50 $»، ثم المكافئ الإجمالي إن لزم.
+- اذكر سعر الصرف المعتمد ووقته ومصدره كلما عرضت مبلغاً محوَّلاً (fx_rate، وهو موجود أصلاً في نتيجة customer_statement).
+- عند تسجيل حركة مالية حدّد العملة صراحة؛ إن لم تكن واضحة من كلام المستخدم فاسأله قبل التسجيل.
 
 ## الأوامر التي تغيّر البيانات
 تمديد عقد، إغلاق عقد، تغيير حالة مركبة، وتسجيل حركة مالية: نفّذها فقط عندما يطلبها صراحة.
