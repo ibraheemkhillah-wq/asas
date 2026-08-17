@@ -63,6 +63,30 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(id DESC);
 
+-- المحادثة المباشرة بين المستخدم والمساعد (Claude)
+CREATE TABLE IF NOT EXISTS assistant_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  role        TEXT NOT NULL,                     -- user | assistant | system
+  body        TEXT NOT NULL DEFAULT '',
+  attachments TEXT,                              -- JSON: قائمة معرّفات الملفات
+  tools_used  TEXT,                              -- JSON: أسماء الأدوات التي استُخدمت
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_assistant_created ON assistant_messages(id);
+
+-- الملفات: مرفوعة من المستخدم أو مسحوبة من eganis
+CREATE TABLE IF NOT EXISTS files (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  size       INTEGER NOT NULL DEFAULT 0,
+  path       TEXT NOT NULL,
+  source     TEXT NOT NULL DEFAULT 'upload',     -- upload | eganis | generated
+  ref        TEXT,                               -- رقم العقد أو المركبة أو العميل
+  kind       TEXT,                               -- contract | insurance | vehicle_photo | id | other
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- دفتر حساب المستأجرين: كل حركة مالية بين الشركة والعميل
 -- credit = لصالح العميل (تأمين، دفعة، خصم)
 -- debit  = على العميل (أجرة، حادث، مخالفة، أو مبلغ أعدناه له)

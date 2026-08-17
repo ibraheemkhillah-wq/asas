@@ -2,31 +2,43 @@
   "_readme": [
     "ملف تعريف الربط مع eganis. انسخه إلى config/eganis.json ثم عدّل المسارات وأسماء الحقول",
     "حسب توثيق حسابك (Broker Web Service / API). القيم أدناه أمثلة توضيحية فقط.",
-    "{{name}} تُستبدل تلقائياً بقيم الوسائط المرسلة من التطبيق."
+    "{{name}} تُستبدل تلقائياً بقيم الوسائط المرسلة من التطبيق.",
+    "كل بيانات العملاء والعقود والحركات المالية والمستندات تُقرأ من eganis عبر هذه المسارات."
   ],
-
   "auth": {
     "path": "/api/auth/login",
     "method": "POST",
-    "body": { "username": "{{username}}", "password": "{{password}}" },
+    "body": {
+      "username": "{{username}}",
+      "password": "{{password}}"
+    },
     "tokenPath": "data.token",
     "ttlSeconds": 1800
   },
-
   "endpoints": {
-    "health": { "method": "GET", "path": "/api/ping" },
-
+    "health": {
+      "method": "GET",
+      "path": "/api/ping"
+    },
     "listVehicles": {
       "method": "GET",
       "path": "/api/vehicles",
-      "query": { "status": "{{status}}", "branch": "{{branch}}", "search": "{{q}}" },
+      "query": {
+        "status": "{{status}}",
+        "branch": "{{branch}}",
+        "search": "{{q}}"
+      },
       "resultPath": "data",
       "map": "vehicle"
     },
     "listContracts": {
       "method": "GET",
       "path": "/api/contracts",
-      "query": { "status": "{{status}}", "date": "{{date}}", "search": "{{q}}" },
+      "query": {
+        "status": "{{status}}",
+        "date": "{{date}}",
+        "search": "{{q}}"
+      },
       "resultPath": "data",
       "map": "contract"
     },
@@ -39,62 +51,105 @@
     "listBookings": {
       "method": "GET",
       "path": "/api/reservations",
-      "query": { "date": "{{date}}", "status": "{{status}}" },
+      "query": {
+        "date": "{{date}}",
+        "status": "{{status}}"
+      },
       "resultPath": "data",
       "map": "booking"
     },
     "listTasks": {
       "method": "GET",
       "path": "/api/movements",
-      "query": { "date": "{{date}}", "type": "{{type}}" },
+      "query": {
+        "date": "{{date}}",
+        "type": "{{type}}"
+      },
       "resultPath": "data",
       "map": "task"
     },
     "searchCustomers": {
       "method": "GET",
       "path": "/api/customers",
-      "query": { "search": "{{q}}" },
+      "query": {
+        "search": "{{q}}"
+      },
       "resultPath": "data",
       "map": "customer"
     },
-
     "extendContract": {
       "method": "POST",
       "path": "/api/contracts/{{id}}/extend",
-      "body": { "days": "{{days}}" },
+      "body": {
+        "days": "{{days}}"
+      },
       "resultPath": "data",
       "map": "contract"
     },
     "closeContract": {
       "method": "POST",
       "path": "/api/contracts/{{id}}/close",
-      "body": { "odometer": "{{odometer}}", "notes": "{{notes}}" },
+      "body": {
+        "odometer": "{{odometer}}",
+        "notes": "{{notes}}"
+      },
       "resultPath": "data",
       "map": "contract"
     },
     "setVehicleStatus": {
       "method": "POST",
       "path": "/api/vehicles/{{id}}/status",
-      "body": { "status": "{{status}}", "note": "{{note}}" },
+      "body": {
+        "status": "{{status}}",
+        "note": "{{note}}"
+      },
       "resultPath": "data",
       "map": "vehicle"
     },
     "assignTask": {
       "method": "POST",
       "path": "/api/movements/{{id}}/assign",
-      "body": { "driver": "{{driver}}" },
+      "body": {
+        "driver": "{{driver}}"
+      },
       "resultPath": "data",
       "map": "task"
     },
     "completeTask": {
       "method": "POST",
       "path": "/api/movements/{{id}}/complete",
-      "body": { "note": "{{note}}" },
+      "body": {
+        "note": "{{note}}"
+      },
       "resultPath": "data",
       "map": "task"
+    },
+    "listLedgerEntries": {
+      "_note": "كشف حساب العميل إن كان متوفراً في eganis. إن لم يوجد، يشتقّ التطبيق الحركات من العقود تلقائياً.",
+      "method": "GET",
+      "path": "/api/customers/{{customerId}}/statement",
+      "resultPath": "data",
+      "map": "ledgerEntry"
+    },
+    "listDocuments": {
+      "_note": "المستندات والصور المرفوعة: العقود، بوالص التأمين، صور المركبات، الهويات.",
+      "method": "GET",
+      "path": "/api/documents",
+      "query": {
+        "customerId": "{{customerId}}",
+        "contractNo": "{{contractNo}}",
+        "plate": "{{plate}}",
+        "type": "{{type}}"
+      },
+      "resultPath": "data",
+      "map": "document"
+    },
+    "downloadDocument": {
+      "_note": "تنزيل الملف نفسه بصلاحيات الحساب — يمرّره التطبيق للمحادثة.",
+      "method": "GET",
+      "path": "/api/documents/{{id}}/download"
     }
   },
-
   "maps": {
     "vehicle": {
       "id": "vehicleId",
@@ -154,6 +209,26 @@
       "idNumber": "nationalId",
       "license": "licenseNo",
       "blacklisted": "isBlacklisted"
+    },
+    "ledgerEntry": {
+      "id": "entryId",
+      "type": "entryType",
+      "direction": "side",
+      "amount": "amount",
+      "ref": "contractNo",
+      "note": "description",
+      "occurredAt": "entryDate"
+    },
+    "document": {
+      "id": "documentId",
+      "name": "fileName",
+      "kind": "documentType",
+      "mime": "contentType",
+      "ref": "referenceNo",
+      "contractNo": "contractNo",
+      "plate": "plateNumber",
+      "customerId": "customerId",
+      "title": "title"
     }
   }
 }

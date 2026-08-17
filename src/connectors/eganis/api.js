@@ -172,6 +172,38 @@ export function createApiDriver() {
       const found = await call('searchCustomers', { q: phone });
       return Array.isArray(found) ? found[0] || null : found || null;
     },
+    /** كشف حساب العميل إن وفّره الحساب مباشرة (وإلا يُشتق من العقود) */
+    listLedgerEntries: profile.endpoints?.listLedgerEntries
+      ? (customerId) => call('listLedgerEntries', { customerId })
+      : undefined,
+
+    /** المستندات والصور المرفوعة على eganis */
+    listDocuments: (args = {}) => call('listDocuments', args),
+
+    /** تنزيل ملف من eganis بصلاحيات الحساب ثم تمريره للتطبيق */
+    async downloadDocument(id) {
+      const spec = profile.endpoints?.downloadDocument;
+      if (!spec) throw new HttpError(501, 'مسار تنزيل المستندات غير معرّف في ملف eganis');
+      const url = new URL(`${baseUrl}${render(spec.path, { id })}`);
+      for (const [key, value] of Object.entries(render(spec.query || {}, { id }))) {
+        if (value !== '') url.searchParams.set(key, value);
+      }
+      const res = await fetchWithTimeout(
+        url,
+        { method: spec.method || 'GET', headers: await authHeaders() },
+        timeoutMs,
+      );
+      if (!res.ok) throw new HttpError(502, `تعذّر تنزيل المستند (${res.status})`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const disposition = res.headers.get('content-disposition') || '';
+      const named = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+      return {
+        name: named ? decodeURIComponent(named[1]) : `${id}`,
+        mime: res.headers.get('content-type') || 'application/octet-stream',
+        buffer,
+      };
+    },
+
     extendContract: (id, days) => call('extendContract', { id, days }),
     closeContract: (id, opts = {}) => call('closeContract', { id, ...opts }),
     setVehicleStatus: (id, status, note) => call('setVehicleStatus', { id, status, note }),

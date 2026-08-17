@@ -9,12 +9,14 @@ import { registerOpsRoutes } from './routes/ops.js';
 import { registerWhatsappRoutes } from './routes/whatsapp.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { registerAccountingRoutes } from './routes/accounting.js';
+import { registerAssistantRoutes } from './routes/assistant.js';
 
 const router = createRouter();
 registerSystemRoutes(router);
 registerOpsRoutes(router);
 registerWhatsappRoutes(router);
 registerAccountingRoutes(router);
+registerAssistantRoutes(router);
 
 const publicDir = path.resolve(process.cwd(), 'public');
 const mimeTypes = {

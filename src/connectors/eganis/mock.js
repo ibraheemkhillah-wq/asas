@@ -204,6 +204,103 @@ export function createMockDriver() {
       return clone(t);
     },
 
+    // ===== المستندات والصور =====
+    // في الوضع التجريبي تُولَّد نماذج SVG بسيطة. بعد الربط الفعلي تأتي الملفات
+    // الأصلية من eganis (PDF / JPEG) كما هي.
+
+    async listDocuments({ customerId, contractNo, plate, type } = {}) {
+      const docs = [];
+
+      for (const c of state.contracts) {
+        if (customerId && c.customerId !== customerId) continue;
+        if (contractNo && c.no !== contractNo) continue;
+        if (plate && c.plate !== plate) continue;
+        docs.push({
+          id: `doc-${c.no}-contract`,
+          name: `عقد الإيجار ${c.no}.svg`,
+          kind: 'contract',
+          mime: 'image/svg+xml',
+          ref: c.no,
+          contractNo: c.no,
+          plate: c.plate,
+          customerId: c.customerId,
+          title: `عقد إيجار ${c.no} — ${c.customerName}`,
+        });
+      }
+
+      for (const v of state.vehicles) {
+        if (plate && v.plate !== plate) continue;
+        if (customerId || contractNo) {
+          const linked = state.contracts.some(
+            (c) =>
+              c.plate === v.plate && (c.customerId === customerId || c.no === contractNo),
+          );
+          if (!linked) continue;
+        }
+        docs.push({
+          id: `doc-${v.plate}-insurance`,
+          name: `بوليصة تأمين ${v.plate}.svg`,
+          kind: 'insurance',
+          mime: 'image/svg+xml',
+          ref: v.plate,
+          plate: v.plate,
+          title: `تأمين المركبة ${v.plate} — ${v.make} ${v.model}`,
+        });
+        docs.push({
+          id: `doc-${v.plate}-photo`,
+          name: `صورة المركبة ${v.plate}.svg`,
+          kind: 'vehicle_photo',
+          mime: 'image/svg+xml',
+          ref: v.plate,
+          plate: v.plate,
+          title: `${v.make} ${v.model} ${v.year} — ${v.plate}`,
+        });
+      }
+
+      return type ? docs.filter((d) => d.kind === type) : docs;
+    },
+
+    async downloadDocument(id) {
+      const doc = (await this.listDocuments({})).find((d) => d.id === id);
+      if (!doc) throw new HttpError(404, `لا يوجد مستند بالمعرّف ${id}`);
+
+      const palette = {
+        contract: '#1B2A56',
+        insurance: '#0f7a51',
+        vehicle_photo: '#334366',
+      }[doc.kind] || '#1B2A56';
+
+      const details = [];
+      if (doc.contractNo) {
+        const c = state.contracts.find((x) => x.no === doc.contractNo);
+        if (c) {
+          details.push(`العميل: ${c.customerName}`, `المركبة: ${c.plate}`,
+            `من ${String(c.startAt).slice(0, 10)} إلى ${String(c.endAt).slice(0, 10)}`,
+            `الأجرة اليومية: ${c.dailyRate} ₺ · التأمين: ${c.deposit || 0} ₺`);
+        }
+      } else if (doc.plate) {
+        const v = state.vehicles.find((x) => x.plate === doc.plate);
+        if (v) details.push(`${v.make} ${v.model} ${v.year}`, `الفئة: ${v.group}`, `الفرع: ${v.branch}`);
+      }
+
+      const rows = details
+        .map((line, i) => `<text x="60" y="${230 + i * 44}" font-size="26" fill="#1b2a56">${line}</text>`)
+        .join('');
+
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" font-family="Tahoma, sans-serif" direction="rtl">
+  <rect width="800" height="560" fill="#ffffff"/>
+  <rect width="800" height="120" fill="${palette}"/>
+  <text x="740" y="55" font-size="30" fill="#ffffff" text-anchor="end" font-weight="bold">CALL &amp; RENT</text>
+  <text x="740" y="92" font-size="20" fill="#c9d4ec" text-anchor="end">${doc.title}</text>
+  <text x="740" y="180" font-size="22" fill="#5a6478" text-anchor="end">${doc.name}</text>
+  ${rows}
+  <rect x="40" y="470" width="720" height="50" rx="10" fill="#f3f5fa"/>
+  <text x="400" y="502" font-size="20" fill="#96650a" text-anchor="middle">نموذج تجريبي — بعد ربط eganis يصل الملف الأصلي</text>
+</svg>`;
+
+      return { name: doc.name, mime: 'image/svg+xml', buffer: Buffer.from(svg, 'utf8'), meta: doc };
+    },
+
     /** يستخدمه المزامن لبناء لوحة اليوم */
     async snapshot() {
       const today = todayKey();

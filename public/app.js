@@ -270,6 +270,228 @@ async function viewFleet() {
   });
 }
 
+// ===== محادثتنا (المساعد) =====
+
+const QUICK_PROMPTS = [
+  'شو المتأخر اليوم؟',
+  'ابعتلي عقد أحمد نصار',
+  'ابعتلي صور المركبة 1234-567',
+  'بوليصة تأمين المركبة 3456-789',
+  'قدّيش بدنا من سامي عودة؟',
+];
+
+/** روابط الملفات تُفتح من الوسوم مباشرة (img/video/a) فلا تحمل ترويسة الدخول — نمرّر الرمز في الرابط */
+function fileUrl(file, { download = false } = {}) {
+  const params = new URLSearchParams();
+  if (state.token) params.set('token', state.token);
+  if (download) params.set('download', '1');
+  const query = params.toString();
+  return `${file.url}${query ? `?${query}` : ''}`;
+}
+
+function fileCard(raw) {
+  // نحسب نوع العرض من الـ mime مباشرة حتى لا نعتمد على بيانات محفوظة قديمة
+  const mime = String(raw.mime || '');
+  const file = {
+    ...raw,
+    url: fileUrl(raw),
+    downloadUrl: fileUrl(raw, { download: true }),
+    isImage: mime.startsWith('image/'),
+    isVideo: mime.startsWith('video/'),
+    isAudio: mime.startsWith('audio/'),
+    isPdf: mime === 'application/pdf',
+  };
+  if (file.isImage) {
+    return `<a class="att" href="${esc(file.url)}" target="_blank" rel="noopener">
+      <img src="${esc(file.url)}" alt="${esc(file.name)}" loading="lazy" />
+      <span>${esc(file.name)}</span>
+    </a>`;
+  }
+  if (file.isVideo) {
+    return `<div class="att"><video src="${esc(file.url)}" controls preload="metadata"></video>
+      <span>${esc(file.name)}</span></div>`;
+  }
+  if (file.isAudio) {
+    return `<div class="att"><audio src="${esc(file.url)}" controls></audio>
+      <span>${esc(file.name)}</span></div>`;
+  }
+  const icon = file.isPdf ? '📄' : '📎';
+  return `<a class="att file" href="${esc(file.downloadUrl)}">
+    <span class="ico">${icon}</span>
+    <span>${esc(file.name)}<small>${Math.max(1, Math.round((file.size || 0) / 1024))} كيلوبايت</small></span>
+  </a>`;
+}
+
+async function viewAssistant() {
+  const data = await api('/api/assistant/messages');
+
+  app.innerHTML = `
+    <div class="card chat-card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">محادثتنا</h2>
+        <div class="row">
+          <span class="badge ${data.ready ? 'open' : 'overdue'}">${data.ready ? 'جاهز' : 'يحتاج مفتاح API'}</span>
+          <button class="btn small ghost" id="chat-clear">مسح المحادثة</button>
+        </div>
+      </div>
+
+      <div class="chat" id="chat">
+        ${
+          data.messages.length
+            ? data.messages.map(renderChatMessage).join('')
+            : `<div class="empty">اسألني عن أي شيء في النظام — عقود، مركبات، حسابات، مستندات.<br />
+                 أرسل لي صورة أو ملفاً وسأتعامل معه.</div>`
+        }
+      </div>
+
+      <div class="quick" id="quick">
+        ${QUICK_PROMPTS.map((q) => `<button class="chip-btn" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}
+      </div>
+
+      <div id="pending" class="pending"></div>
+
+      <div class="composer">
+        <textarea id="chat-input" rows="2" placeholder="اكتب رسالتك… (Enter للإرسال، Shift+Enter لسطر جديد)"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="chat-send">إرسال</button>
+          <button class="btn ghost" id="chat-attach">إرفاق ملف</button>
+          <input type="file" id="chat-file" multiple hidden />
+          <span class="muted" style="font-size:12.5px">صور و PDF أقرأها · فيديو وصوت وملفات أخرى تُحفظ وتُرسل</span>
+        </div>
+      </div>
+    </div>`;
+
+  const chatBox = document.getElementById('chat');
+  const input = document.getElementById('chat-input');
+  const pendingBox = document.getElementById('pending');
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  let pending = []; // ملفات مرفوعة بانتظار الإرسال
+
+  function drawPending() {
+    pendingBox.innerHTML = pending.length
+      ? `<div class="row">${pending
+          .map((f, i) => `<span class="chip-btn" data-drop="${i}">${esc(f.name)} ✕</span>`)
+          .join('')}</div>`
+      : '';
+  }
+
+  async function uploadFiles(fileList) {
+    for (const file of fileList) {
+      try {
+        const dataBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const saved = await api('/api/assistant/upload', {
+          method: 'POST',
+          body: { name: file.name, mime: file.type || 'application/octet-stream', dataBase64 },
+        });
+        pending.push(saved);
+        drawPending();
+      } catch (err) {
+        toast(`تعذّر رفع ${file.name}: ${err.message}`, true);
+      }
+    }
+  }
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text && !pending.length) return;
+    const fileIds = pending.map((f) => f.id);
+    const attachments = [...pending];
+
+    input.value = '';
+    pending = [];
+    drawPending();
+
+    chatBox.insertAdjacentHTML(
+      'beforeend',
+      renderChatMessage({ role: 'user', body: text, attachments, created_at: null }) +
+        '<div class="msg-a thinking" id="thinking">…أبحث في النظام</div>',
+    );
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    try {
+      const result = await api('/api/assistant/message', {
+        method: 'POST',
+        body: { text, fileIds },
+      });
+      document.getElementById('thinking')?.remove();
+      chatBox.insertAdjacentHTML(
+        'beforeend',
+        renderChatMessage({
+          role: 'assistant',
+          body: result.reply,
+          attachments: result.attachments,
+          tools_used: result.toolsUsed,
+          created_at: null,
+        }),
+      );
+      chatBox.scrollTop = chatBox.scrollHeight;
+    } catch (err) {
+      document.getElementById('thinking')?.remove();
+      chatBox.insertAdjacentHTML(
+        'beforeend',
+        `<div class="msg-a err">${esc(err.message)}</div>`,
+      );
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+  }
+
+  document.getElementById('chat-send').onclick = send;
+  input.onkeydown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      send();
+    }
+  };
+  document.getElementById('chat-attach').onclick = () => document.getElementById('chat-file').click();
+  document.getElementById('chat-file').onchange = (event) => uploadFiles([...event.target.files]);
+
+  document.getElementById('quick').onclick = (event) => {
+    const q = event.target.dataset?.quick;
+    if (!q) return;
+    input.value = q;
+    send();
+  };
+
+  pendingBox.onclick = (event) => {
+    const index = event.target.dataset?.drop;
+    if (index === undefined) return;
+    pending.splice(Number(index), 1);
+    drawPending();
+  };
+
+  document.getElementById('chat-clear').onclick = async () => {
+    if (!confirm('مسح كل رسائل المحادثة؟')) return;
+    await api('/api/assistant/messages', { method: 'DELETE' });
+    render();
+  };
+
+  // السحب والإفلات
+  chatBox.ondragover = (e) => e.preventDefault();
+  chatBox.ondrop = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer?.files?.length) uploadFiles([...e.dataTransfer.files]);
+  };
+}
+
+function renderChatMessage(m) {
+  const attachments = (m.attachments || []).map(fileCard).join('');
+  const tools = (m.tools_used || []).length
+    ? `<div class="tools">${[...new Set(m.tools_used)].map((t) => `<span class="chip-btn">${esc(t)}</span>`).join('')}</div>`
+    : '';
+  const body = esc(m.body || '').replace(/\n/g, '<br />');
+  return `<div class="${m.role === 'user' ? 'msg-u' : 'msg-a'}">
+    ${body}
+    ${attachments ? `<div class="atts">${attachments}</div>` : ''}
+    ${tools}
+  </div>`;
+}
+
 // ===== محاسبة المستأجرين =====
 
 async function viewAccounting() {
@@ -705,6 +927,7 @@ async function viewAudit() {
 
 const views = {
   today: viewToday,
+  assistant: viewAssistant,
   contracts: viewContracts,
   fleet: viewFleet,
   accounting: viewAccounting,

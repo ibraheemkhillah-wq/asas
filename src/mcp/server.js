@@ -210,6 +210,22 @@ const tools = [
     run: (args) => api('POST', '/api/ops/notes', { body: args }),
   },
 
+  {
+    name: 'list_documents',
+    description:
+      'المستندات والصور المرفوعة على eganis: العقود، بوالص التأمين، صور المركبات، الهويات. صفِّ بالعميل أو رقم العقد أو اللوحة أو النوع.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: str('معرّف العميل'),
+        contractNo: str('رقم العقد'),
+        plate: str('رقم اللوحة'),
+        type: str('contract | insurance | vehicle_photo | id'),
+      },
+    },
+    run: (args) => api('GET', '/api/documents', { query: args }),
+  },
+
   // ===== محاسبة المستأجرين =====
   {
     name: 'customer_statement',

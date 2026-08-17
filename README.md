@@ -51,7 +51,7 @@ Claude عبر MCP  ──────────┘   (Node HTTP)   ├─► �
 | `public/` | لوحة التحكم (عربية، اتجاه RTL، بلا خطوة بناء) |
 | `public/logo-mark.svg` | شعار الشركة داخل التطبيق — استبدله بملفك الرسمي متى شئت |
 
-**قاعدة ثابتة:** كل بيانات التشغيل (العقود، المركبات، الحجوزات) تبقى مصدرها eganis —
+**قاعدة ثابتة:** كل بيانات التشغيل (العقود، المركبات، الحجوزات، الحركات المالية، المستندات والصور) تبقى مصدرها eganis —
 النظام لا ينسخها ولا يصبح مصدراً موازياً. ما يُخزَّن محلياً فقط: المحادثات، الردود
 المدرَّبة، الملاحظات، وسجل التدقيق.
 
@@ -69,7 +69,7 @@ eganis يوفّر Broker Web Service للتكامل. اطلب من مزوّد ا
 cp config/eganis.example.json config/eganis.json
 ```
 
-عدّل في الملف: مسار تسجيل الدخول، مسار كل عملية (`listContracts`، `extendContract` …)،
+عدّل في الملف: مسار تسجيل الدخول، مسار كل عملية (`listContracts`، `extendContract`، `listLedgerEntries`، `listDocuments`، `downloadDocument` …)،
 وخريطة الحقول (`maps`) لتحويل أسماء حقول eganis إلى أسماء النظام. ثم في `.env`:
 
 ```
@@ -196,7 +196,9 @@ npm i playwright && npx playwright install chromium
 | `list_vehicles` / `list_bookings` / `list_tasks` | `set_vehicle_status` حالة مركبة |
 | `search_customers` / `customer_context` | `assign_task` / `complete_task` |
 | `whatsapp_conversations` / `whatsapp_conversation` | `whatsapp_draft_reply` صياغة رد |
-| `list_reply_templates` / `system_status` / `audit_log` | `whatsapp_send` إرسال (بعد موافقتك) |
+| `list_documents` مستندات وصور | `whatsapp_send` إرسال (بعد موافقتك) |
+| `customer_statement` / `open_balances` | `add_ledger_entry` / `settle_customer` |
+| `list_reply_templates` / `system_status` / `audit_log` | `send_statement` كشف حساب على واتساب |
 | | `add_note` / `add_reply_template` |
 
 كل أمر تنفيذ يمرّ عبر نفس مسارات التطبيق ويُسجَّل في سجل التدقيق باسم `mcp`.
