@@ -8,11 +8,13 @@ import { createRouter } from './lib/router.js';
 import { registerOpsRoutes } from './routes/ops.js';
 import { registerWhatsappRoutes } from './routes/whatsapp.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { registerAccountingRoutes } from './routes/accounting.js';
 
 const router = createRouter();
 registerSystemRoutes(router);
 registerOpsRoutes(router);
 registerWhatsappRoutes(router);
+registerAccountingRoutes(router);
 
 const publicDir = path.resolve(process.cwd(), 'public');
 const mimeTypes = {

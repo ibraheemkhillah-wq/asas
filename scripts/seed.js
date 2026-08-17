@@ -4,6 +4,7 @@
  */
 import { db, get, run } from '../src/db.js';
 import { addTemplate, recordInbound } from '../src/core/inbox.js';
+import { addEntry } from '../src/core/accounting.js';
 
 const templates = [
   {
@@ -74,4 +75,56 @@ if (!get('SELECT id FROM conversations WHERE phone = ?', [demoPhone])) {
 }
 
 console.log(`تم إدخال ${added} رد مدرَّب.`);
+
+// ===== حركات محاسبية تجريبية =====
+// (الحركات المشتقّة من العقود — تأمين، أجرة، دفعات — تأتي تلقائياً من eganis،
+//  وهذه هي الحركات اليدوية التي يسجّلها الموظف: حوادث، مخالفات، إعادة تأمين)
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+
+const ledgerSeed = [
+  {
+    customerId: 'C-502',
+    customerName: 'سامي عودة',
+    phone: '905337778899',
+    type: 'damage',
+    amount: 4200,
+    ref: 'CR-2042',
+    note: 'حادث: إصلاح الصدام الأمامي والمصباح الأيسر — فاتورة الورشة 4200',
+    occurredAt: daysAgo(2),
+  },
+  {
+    customerId: 'C-501',
+    customerName: 'أحمد نصار',
+    phone: '905321114422',
+    type: 'deposit_refund',
+    amount: 2500,
+    ref: 'CR-2040',
+    note: 'إعادة تأمين العقد السابق نقداً',
+    occurredAt: daysAgo(12),
+  },
+  {
+    customerId: 'C-503',
+    customerName: 'ليلى حجازي',
+    phone: '905445556677',
+    type: 'fine',
+    amount: 320,
+    ref: 'CR-2043',
+    note: 'مخالفة سرعة — جسر الفاتح',
+    occurredAt: daysAgo(1),
+  },
+];
+
+let ledgerAdded = 0;
+for (const entry of ledgerSeed) {
+  const exists = get(
+    'SELECT id FROM ledger_entries WHERE customer_id = ? AND type = ? AND amount = ?',
+    [entry.customerId, entry.type, entry.amount],
+  );
+  if (!exists) {
+    addEntry(entry, 'seed');
+    ledgerAdded += 1;
+  }
+}
+console.log(`تم إدخال ${ledgerAdded} حركة محاسبية تجريبية.`);
+
 db.close();

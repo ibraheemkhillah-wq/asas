@@ -210,6 +210,70 @@ const tools = [
     run: (args) => api('POST', '/api/ops/notes', { body: args }),
   },
 
+  // ===== محاسبة المستأجرين =====
+  {
+    name: 'customer_statement',
+    description:
+      'كشف حساب عميل: كل الحركات (تأمينات، أجرة، دفعات، حوادث، مخالفات) مع الرصيد النهائي — كم له علينا أو كم عليه لنا، ونص جاهز للإرسال.',
+    inputSchema: {
+      type: 'object',
+      properties: { q: str('اسم العميل أو رقم هاتفه أو معرّفه') },
+      required: ['q'],
+    },
+    run: (args) => api('GET', '/api/accounting/statement', { query: args }),
+  },
+  {
+    name: 'open_balances',
+    description: 'كل العملاء الذين لهم رصيد عندنا أو عليهم مستحقات، مرتّبين بالأكبر مبلغاً.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => api('GET', '/api/accounting/open-balances'),
+  },
+  {
+    name: 'add_ledger_entry',
+    description:
+      'إضافة حركة مالية على حساب عميل. الأنواع: deposit تأمين، payment دفعة، discount خصم (لصالح العميل) — deposit_refund إعادة تأمين، rent_charge أجرة، damage تكاليف حادث، fine مخالفة، fuel وقود، extra رسوم (على العميل).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: str('معرّف العميل من eganis'),
+        customerName: str('اسم العميل'),
+        phone: str('هاتف العميل'),
+        type: str('نوع الحركة'),
+        amount: num('المبلغ بالليرة'),
+        ref: str('رقم العقد أو المرجع'),
+        note: str('وصف الحركة'),
+      },
+      required: ['customerId', 'type', 'amount'],
+    },
+    run: (args) => api('POST', '/api/accounting/entries', { body: args }),
+  },
+  {
+    name: 'settle_customer',
+    description:
+      'تصفية حساب عميل: تسجّل إعادة الرصيد له أو تحصيل المستحقات منه فيصبح الحساب صفراً. استخدمه بعد تأكيد المستخدم.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        q: str('اسم العميل أو هاتفه'),
+        method: str('طريقة التسوية: نقداً / حوالة / خصم'),
+        note: str('ملاحظة'),
+      },
+      required: ['q'],
+    },
+    run: (args) => api('POST', '/api/accounting/settle', { body: args }),
+  },
+  {
+    name: 'send_statement',
+    description:
+      'تجهيز كشف حساب العميل في محادثته على واتساب. افتراضياً يُحفظ كمسوّدة؛ مرّر send=true للإرسال الفعلي بعد موافقة المستخدم.',
+    inputSchema: {
+      type: 'object',
+      properties: { q: str('اسم العميل أو هاتفه'), send: { type: 'boolean', description: 'إرسال فعلي' } },
+      required: ['q'],
+    },
+    run: (args) => api('POST', '/api/accounting/send-statement', { body: args }),
+  },
+
   // ===== واتساب =====
   {
     name: 'whatsapp_conversations',

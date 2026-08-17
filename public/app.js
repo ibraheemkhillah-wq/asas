@@ -2,7 +2,13 @@ const app = document.getElementById('app');
 const toastEl = document.getElementById('toast');
 const statusPill = document.getElementById('status-pill');
 
-const state = { view: 'today', token: localStorage.getItem('appToken') || '', conversationId: null };
+const state = {
+  view: 'today',
+  token: localStorage.getItem('appToken') || '',
+  conversationId: null,
+  accountingQuery: '',
+  accountingCustomer: null,
+};
 
 // ===== أدوات =====
 
@@ -33,7 +39,8 @@ const esc = (value) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
   );
 
-const money = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ₺`;
+const money = (n) =>
+  `<bdi dir="ltr">${Number(n || 0).toLocaleString('ar-EG')} ₺</bdi>`;
 
 const fmtDate = (value) =>
   value
@@ -263,6 +270,229 @@ async function viewFleet() {
   });
 }
 
+// ===== محاسبة المستأجرين =====
+
+async function viewAccounting() {
+  const balances = await api('/api/accounting/open-balances');
+
+  app.innerHTML = `
+    <div class="toolbar">
+      <input id="acc-q" placeholder="اكتب اسم العميل أو رقم هاتفه…" value="${esc(state.accountingQuery || '')}" />
+      <button class="btn" id="acc-search">عرض الحساب</button>
+    </div>
+    <div id="acc-result"></div>
+    <div class="card" style="margin-top:14px">
+      <h2>حسابات غير مصفّاة</h2>
+      <p class="muted">العملاء الذين لهم رصيد عندنا أو عليهم مستحقات — اضغط أي اسم لفتح كشفه.</p>
+      ${table(['العميل', 'الهاتف', 'تأمينات محفوظة', 'الحالة', 'المبلغ'], balances, (b) => `
+        <tr class="clickable" data-open="${esc(b.customer.name)}">
+          <td>${esc(b.customer.name)}</td>
+          <td>${esc(b.customer.phone || '—')}</td>
+          <td>${money(b.depositsHeld)}</td>
+          <td>${
+            b.status === 'company_owes'
+              ? '<span class="badge open">له عندنا</span>'
+              : '<span class="badge overdue">مطلوب منه</span>'
+          }</td>
+          <td><strong>${money(b.status === 'company_owes' ? b.toRefund : b.toCollect)}</strong></td>
+        </tr>`)}
+    </div>`;
+
+  const input = document.getElementById('acc-q');
+
+  async function loadStatement(q) {
+    state.accountingQuery = q;
+    const box = document.getElementById('acc-result');
+    box.innerHTML = '<div class="card"><div class="empty">جارِ حساب الكشف…</div></div>';
+    const stmt = await api(`/api/accounting/statement?q=${encodeURIComponent(q)}`);
+
+    if (!stmt.found) {
+      box.innerHTML = `<div class="card"><div class="empty">${esc(stmt.message)}</div></div>`;
+      return;
+    }
+    state.accountingCustomer = stmt.customer;
+
+    const headline =
+      stmt.status === 'company_owes'
+        ? { text: 'مستحق للعميل — نُعيده له', value: stmt.toRefund, cls: 'ok' }
+        : stmt.status === 'customer_owes'
+          ? { text: 'مطلوب من العميل — نطالبه به', value: stmt.toCollect, cls: 'danger' }
+          : { text: 'الحساب مصفّى', value: 0, cls: '' };
+
+    box.innerHTML = `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <h2 style="margin-bottom:4px">${esc(stmt.customer.name)}</h2>
+            <div class="muted">${esc(stmt.customer.phone || '')} ${
+              stmt.customer.idNumber ? `· هوية ${esc(stmt.customer.idNumber)}` : ''
+            }</div>
+          </div>
+          <div style="text-align:center">
+            <div class="kpi-value ${headline.cls}">${money(headline.value)}</div>
+            <div class="kpi-label">${esc(headline.text)}</div>
+          </div>
+        </div>
+
+        <div class="grid kpi" style="margin-top:14px">
+          <div class="card"><div class="kpi-value">${money(stmt.totals.depositsHeld)}</div><div class="kpi-label">تأمينات محفوظة</div></div>
+          <div class="card"><div class="kpi-value">${money(stmt.totals.credits)}</div><div class="kpi-label">إجمالي ما دفعه</div></div>
+          <div class="card"><div class="kpi-value">${money(stmt.totals.debits)}</div><div class="kpi-label">إجمالي المستحقات عليه</div></div>
+          <div class="card"><div class="kpi-value ${stmt.totals.damages ? 'warn' : ''}">${money(stmt.totals.damages)}</div><div class="kpi-label">تكاليف حوادث</div></div>
+        </div>
+
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="acc-send">إرسال الكشف للعميل</button>
+          <button class="btn ghost" id="acc-copy">نسخ الكشف</button>
+          <button class="btn ghost" id="acc-add">إضافة حركة</button>
+          ${stmt.status !== 'settled' ? '<button class="btn ghost" id="acc-settle">تصفية الحساب</button>' : ''}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h2>تفاصيل الحركات</h2>
+        ${table(['التاريخ', 'الحركة', 'المرجع', 'له', 'عليه', 'الرصيد', ''], stmt.entries, (e) => `
+          <tr>
+            <td>${esc(e.date)}</td>
+            <td>${esc(e.label)}${e.note ? `<div class="muted" style="font-size:12px">${esc(e.note)}</div>` : ''}</td>
+            <td>${esc(e.ref || '—')}</td>
+            <td>${e.credit ? money(e.credit) : '—'}</td>
+            <td>${e.debit ? money(e.debit) : '—'}</td>
+            <td><strong>${money(e.running)}</strong></td>
+            <td>${
+              e.source === 'manual'
+                ? `<button class="btn small ghost" data-void="${e.id}">إلغاء</button>`
+                : '<span class="badge">eganis</span>'
+            }</td>
+          </tr>`)}
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h2>الكشف كما سيصل العميل</h2>
+        <pre id="acc-text" style="white-space:pre-wrap;font-family:inherit;font-size:13.5px;margin:0">${esc(stmt.text)}</pre>
+      </div>`;
+
+    document.getElementById('acc-copy').onclick = async () => {
+      await navigator.clipboard.writeText(stmt.text).catch(() => {});
+      toast('تم نسخ الكشف');
+    };
+
+    document.getElementById('acc-send').onclick = async () => {
+      try {
+        const result = await api('/api/accounting/send-statement', {
+          method: 'POST',
+          body: { q: state.accountingQuery, send: false },
+        });
+        toast('تم تجهيز الكشف كمسوّدة في محادثة العميل على واتساب');
+        state.conversationId = result.conversationId;
+      } catch (err) {
+        toast(err.message, true);
+      }
+    };
+
+    document.getElementById('acc-add').onclick = () => openEntryForm(stmt.customer);
+
+    const settleBtn = document.getElementById('acc-settle');
+    if (settleBtn) {
+      settleBtn.onclick = async () => {
+        const verb = stmt.status === 'company_owes' ? 'إعادة' : 'تحصيل';
+        const amount = stmt.status === 'company_owes' ? stmt.toRefund : stmt.toCollect;
+        if (!confirm(`تأكيد ${verb} مبلغ ${amount} ₺ وتصفية حساب ${stmt.customer.name}؟`)) return;
+        try {
+          await api('/api/accounting/settle', {
+            method: 'POST',
+            body: { q: state.accountingQuery, method: 'نقداً' },
+          });
+          toast('تمت تصفية الحساب');
+          await loadStatement(state.accountingQuery);
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+    }
+  }
+
+  async function openEntryForm(customer) {
+    const types = await api('/api/accounting/entry-types');
+    const box = document.getElementById('acc-result');
+    const form = document.createElement('div');
+    form.className = 'card';
+    form.style.marginTop = '14px';
+    form.innerHTML = `
+      <h2>إضافة حركة على حساب ${esc(customer.name)}</h2>
+      <div class="field">
+        <label>نوع الحركة</label>
+        <select id="e-type">
+          ${types
+            .filter((t) => t.type !== 'settlement')
+            .map((t) => `<option value="${esc(t.type)}">${esc(t.label)} — ${t.direction === 'credit' ? 'له' : 'عليه'}</option>`)
+            .join('')}
+        </select>
+      </div>
+      <div class="field"><label>المبلغ (₺)</label><input id="e-amount" type="number" min="0" step="0.01" /></div>
+      <div class="field"><label>المرجع (رقم عقد أو مركبة — اختياري)</label><input id="e-ref" /></div>
+      <div class="field"><label>ملاحظة (اختياري)</label><input id="e-note" placeholder="مثال: إصلاح صدام أمامي بعد حادث" /></div>
+      <div class="row">
+        <button class="btn" id="e-save">حفظ الحركة</button>
+        <button class="btn ghost" id="e-cancel">إلغاء</button>
+      </div>`;
+    box.appendChild(form);
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    form.querySelector('#e-cancel').onclick = () => form.remove();
+    form.querySelector('#e-save').onclick = async () => {
+      const amount = Number(form.querySelector('#e-amount').value);
+      if (!amount || amount <= 0) return toast('أدخل مبلغاً صحيحاً', true);
+      try {
+        await api('/api/accounting/entries', {
+          method: 'POST',
+          body: {
+            customerId: customer.id,
+            customerName: customer.name,
+            phone: customer.phone,
+            type: form.querySelector('#e-type').value,
+            amount,
+            ref: form.querySelector('#e-ref').value.trim() || null,
+            note: form.querySelector('#e-note').value.trim() || null,
+          },
+        });
+        toast('تمت إضافة الحركة');
+        await loadStatement(state.accountingQuery);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    };
+  }
+
+  document.getElementById('acc-search').onclick = () =>
+    loadStatement(input.value.trim()).catch((err) => toast(err.message, true));
+  input.onkeydown = (event) => {
+    if (event.key === 'Enter') loadStatement(input.value.trim()).catch((err) => toast(err.message, true));
+  };
+
+  app.addEventListener('click', async (event) => {
+    const row = event.target.closest('[data-open]');
+    if (row) {
+      input.value = row.dataset.open;
+      loadStatement(row.dataset.open).catch((err) => toast(err.message, true));
+      return;
+    }
+    const voidId = event.target.dataset?.void;
+    if (voidId) {
+      if (!confirm('إلغاء هذه الحركة من الحساب؟')) return;
+      try {
+        await api(`/api/accounting/entries/${voidId}`, { method: 'DELETE' });
+        toast('تم إلغاء الحركة');
+        await loadStatement(state.accountingQuery);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    }
+  });
+
+  if (state.accountingQuery) await loadStatement(state.accountingQuery);
+}
+
 async function viewInbox() {
   const conversations = await api('/api/whatsapp/conversations');
   app.innerHTML = `
@@ -477,6 +707,7 @@ const views = {
   today: viewToday,
   contracts: viewContracts,
   fleet: viewFleet,
+  accounting: viewAccounting,
   inbox: viewInbox,
   templates: viewTemplates,
   audit: viewAudit,

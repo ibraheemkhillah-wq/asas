@@ -63,6 +63,27 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(id DESC);
 
+-- دفتر حساب المستأجرين: كل حركة مالية بين الشركة والعميل
+-- credit = لصالح العميل (تأمين، دفعة، خصم)
+-- debit  = على العميل (أجرة، حادث، مخالفة، أو مبلغ أعدناه له)
+CREATE TABLE IF NOT EXISTS ledger_entries (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id   TEXT NOT NULL,
+  customer_name TEXT,
+  phone         TEXT,
+  type          TEXT NOT NULL,
+  direction     TEXT NOT NULL,                    -- credit | debit
+  amount        REAL NOT NULL CHECK (amount >= 0),
+  ref           TEXT,                             -- رقم العقد أو المرجع
+  note          TEXT,
+  occurred_at   TEXT NOT NULL,                    -- تاريخ الحركة
+  source        TEXT NOT NULL DEFAULT 'manual',   -- manual | eganis
+  author        TEXT NOT NULL DEFAULT 'dashboard',
+  voided        INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_customer ON ledger_entries(customer_id, occurred_at);
+
 -- ملاحظات تشغيلية مرتبطة بعقد/مركبة/عميل
 CREATE TABLE IF NOT EXISTS notes (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -180,6 +180,8 @@ label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px
 .field { margin-bottom: 12px; }
 
 .empty { color: var(--muted); padding: 30px; text-align: center; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--accent-soft); }
 
 /* صندوق واتساب */
 .inbox { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
