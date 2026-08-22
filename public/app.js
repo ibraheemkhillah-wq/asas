@@ -55,7 +55,8 @@ const dualMoney = (amounts = {}, { hideZero = false } = {}) => {
   if (!hideZero || t) parts.push(money(t, 'TRY'));
   if (!hideZero || u) parts.push(money(u, 'USD'));
   if (!parts.length) parts.push(money(0, 'TRY'));
-  return parts.join(' <span class="muted">/</span> ');
+  // مسافة غير فاصلة قبل الشرطة حتى لا تنزل وحدها على سطر جديد
+  return parts.join('&nbsp;<span class="muted">/</span> ');
 };
 
 const fmtDate = (value) =>
