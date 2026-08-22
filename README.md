@@ -90,18 +90,23 @@ EGANIS_PASSWORD=...
 npm i playwright && npx playwright install chromium
 ```
 
-**الخطوات بالترتيب** (نفّذ ١ و٢ على كمبيوتر فيه شاشة، ثم انقل النتيجة للخادم):
+**الخطوات بالترتيب** (على كمبيوتر فيه شاشة، ثم تُنقل النتيجة للخادم) —
+الدليل المفصّل للمستخدم: [`docs/eganis-browser-steps.md`](docs/eganis-browser-steps.md)
 
 ```bash
 # 1) سجّل دخولك بيدك مرة واحدة — يفتح متصفّحاً مرئياً ويحفظ الجلسة
 npm run eganis:inspect -- login
 
-# 2) اكتشف صفحات لوحتك
-npm run eganis:inspect -- menu
+# 2) اكتشاف الصفحات ووصف جداولها تلقائياً (يكفي عادةً)
+npm run eganis:inspect -- auto
 
-# 3) صِف جداول الصفحات التي تهمّنا
-npm run eganis:inspect -- scan /contracts /vehicles /customers
+# عند الحاجة: سرد كل الروابط، أو فحص صفحات تحدّدها بنفسك
+npm run eganis:inspect -- menu
+npm run eganis:inspect -- scan /sozlesmeler /araclar
 ```
+
+يستخدم المستكشف متصفّح Chrome المثبَّت على جهازك إن وُجد، فلا يحتاج تنزيل متصفّح إضافي.
+وتُخفى أرقام الهواتف والهويات تلقائياً من العيّنات (يعطّلها `--raw`).
 
 المخرجات كلها تبقى عندك في `data/eganis-inspect/` (وصف الجداول + لقطات + HTML)،
 ومنها تُكتب المحدِّدات في `config/eganis.json`.

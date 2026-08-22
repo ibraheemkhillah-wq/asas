@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { config } from '../src/config.js';
+import { findChrome } from '../src/core/statement-pdf.js';
 
 const OUT_DIR = path.resolve(process.cwd(), 'data/eganis-inspect');
 const SESSION_FILE = path.resolve(process.cwd(), 'data/eganis-session.json');
@@ -45,35 +46,73 @@ async function playwright() {
     return await import('playwright');
   } catch {
     bad('حزمة playwright غير مثبّتة.');
-    dim('نفّذ: npm i playwright && npx playwright install chromium');
+    dim('نفّذ: npm i playwright');
     process.exit(1);
   }
 }
 
-function requireBaseUrl() {
-  if (!config.eganis.baseUrl) {
-    bad('EGANIS_BASE_URL غير محدّد في ملف .env');
-    dim('مثال: EGANIS_BASE_URL=https://panel.eganis.com.tr');
+/**
+ * تشغيل المتصفّح: نستخدم Chrome/Chromium المثبَّت على الجهاز إن وُجد،
+ * فلا يحتاج المستخدم تنزيل متصفّح إضافي (npx playwright install).
+ */
+async function launch(options = {}) {
+  const { chromium } = await playwright();
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH || findChrome() || undefined;
+  try {
+    return await chromium.launch({ ...options, executablePath });
+  } catch (err) {
+    if (executablePath) {
+      // المتصفّح الموجود رفض التشغيل — نجرّب متصفّح Playwright نفسه
+      try {
+        return await chromium.launch(options);
+      } catch {
+        /* نُظهر الخطأ الأصلي أدناه */
+      }
+    }
+    bad(`تعذّر تشغيل المتصفّح: ${err.message.split('\n')[0]}`);
+    dim('ثبّت Google Chrome، أو نفّذ: npx playwright install chromium');
+    dim('أو حدّد المسار يدوياً: PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome');
     process.exit(1);
   }
-  return config.eganis.baseUrl;
 }
 
-const waitForEnter = (message) =>
+const ask = (question) =>
   new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`\n${message}\n> `, () => {
+    rl.question(`\n${question}\n> `, (answer) => {
       rl.close();
-      resolve();
+      resolve(answer.trim());
     });
   });
 
+const waitForEnter = (message) => ask(message);
+
+const BASE_URL_FILE = path.resolve(process.cwd(), 'data/eganis-base-url.txt');
+
+/** عنوان اللوحة: من .env أو من ملف محفوظ أو نسأل عنه مباشرة */
+async function resolveBaseUrl() {
+  if (config.eganis.baseUrl) return config.eganis.baseUrl;
+  if (fs.existsSync(BASE_URL_FILE)) return fs.readFileSync(BASE_URL_FILE, 'utf8').trim();
+
+  const answer = await ask(
+    'ما رابط لوحة eganis التي تفتحها كل يوم؟ (انسخه من شريط عنوان المتصفّح)\nمثال: https://panel.eganis.com.tr',
+  );
+  const url = answer.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) {
+    bad('الرابط يجب أن يبدأ بـ https:// أو http://');
+    process.exit(1);
+  }
+  fs.mkdirSync(path.dirname(BASE_URL_FILE), { recursive: true });
+  fs.writeFileSync(BASE_URL_FILE, url, 'utf8');
+  ok(`حُفظ الرابط — لن نسأل عنه مرة أخرى (${BASE_URL_FILE})`);
+  return url;
+}
+
 /** تسجيل دخول يدوي مرة واحدة، ثم حفظ الجلسة لإعادة استخدامها */
 async function login() {
-  const { chromium } = await playwright();
-  const baseUrl = requireBaseUrl();
+  const baseUrl = await resolveBaseUrl();
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await launch({ headless: false });
   const context = await browser.newContext({ locale: 'tr-TR', viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
 
@@ -93,13 +132,12 @@ async function login() {
 }
 
 async function withSession(fn) {
-  const { chromium } = await playwright();
-  const baseUrl = requireBaseUrl();
+  const baseUrl = await resolveBaseUrl();
   if (!fs.existsSync(SESSION_FILE)) {
     bad('لا توجد جلسة محفوظة — نفّذ أولاً: npm run eganis:inspect -- login');
     process.exit(1);
   }
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launch({ headless: true });
   const context = await browser.newContext({ storageState: SESSION_FILE, locale: 'tr-TR' });
   try {
     return await fn({ context, baseUrl });
@@ -134,6 +172,45 @@ async function menu() {
     ok(`حُفظ: ${path.join(OUT_DIR, 'menu.json')} و home.png`);
     dim('ابعتلي menu.json وأقول لك أي الصفحات نحتاج.');
   });
+}
+
+/**
+ * إخفاء البيانات الشخصية من العيّنات: نحتفظ بشكل القيمة (كم رقماً، كيف تُنسَّق)
+ * لأنه ما نحتاجه لمطابقة الأعمدة، ونستبدل المحتوى الحسّاس.
+ */
+function redact(value) {
+  return String(value)
+    .replace(/[\w.+-]+@[\w.-]+\.\w+/g, '«بريد»')
+    .replace(/\d[\d\s()+-]{7,}\d/g, (m) => `«رقم ${m.replace(/\D/g, '').length} خانة»`)
+    .replace(/\b\d{9,}\b/g, (m) => `«رقم ${m.length} خانة»`);
+}
+
+function redactDescribed(described, enabled) {
+  if (!enabled) return described;
+  for (const table of described.tables || []) {
+    table.firstRow = (table.firstRow || []).map(redact);
+  }
+  return described;
+}
+
+/** الصفحات التي تهمّنا، بكلمات تركية وإنجليزية كما تسمّيها لوحات eganis */
+// الترتيب مقصود: الأكثر تحديداً أولاً. تجنّبنا كلمات قصيرة تتداخل
+// (مثل "car" التي تقع داخل "cari hesap" وتعني الحساب لا المركبة).
+const PAGE_HINTS = [
+  { kind: 'ledger', words: ['cari', 'hesap', 'tahsilat', 'odeme', 'ödeme', 'kasa', 'ekstre', 'account', 'payment'] },
+  { kind: 'contracts', words: ['sozlesme', 'sözleşme', 'kiralama', 'contract', 'rental'] },
+  { kind: 'bookings', words: ['rezervasyon', 'reservation', 'booking'] },
+  { kind: 'customers', words: ['musteri', 'müşteri', 'customer', 'client'] },
+  { kind: 'vehicles', words: ['arac', 'araç', 'vehicle', 'filo', 'fleet', 'plaka'] },
+  { kind: 'documents', words: ['belge', 'dosya', 'evrak', 'document', 'foto', 'resim'] },
+];
+
+function classify(link) {
+  const haystack = `${link.text} ${link.href}`.toLowerCase();
+  for (const hint of PAGE_HINTS) {
+    if (hint.words.some((w) => haystack.includes(w))) return hint.kind;
+  }
+  return null;
 }
 
 /** وصف جداول صفحة: الأعمدة، عدد الصفوف، عيّنة صف */
@@ -180,7 +257,7 @@ async function describePage(page) {
 }
 
 /** فحص صفحات محدّدة وحفظ وصفها ولقطاتها */
-async function scan(paths) {
+async function scan(paths, { mask = true, labels = {} } = {}) {
   if (!paths.length) {
     bad('حدّد صفحة واحدة على الأقل، مثال: npm run eganis:inspect -- scan /contracts');
     process.exit(1);
@@ -199,8 +276,9 @@ async function scan(paths) {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await page.waitForTimeout(3500); // انتظار الجداول التي تُحمّل بجافاسكربت
 
-        const described = await describePage(page);
+        const described = redactDescribed(await describePage(page), mask);
         described.path = target;
+        described.kind = labels[target] || null;
         results.push(described);
 
         fs.writeFileSync(path.join(OUT_DIR, `${safe}.html`), await page.content(), 'utf8');
@@ -230,7 +308,71 @@ async function scan(paths) {
   fs.writeFileSync(file, JSON.stringify(summary, null, 2), 'utf8');
   console.log('');
   ok(`حُفظ الوصف الكامل: ${file}`);
-  dim('راجع الصور و HTML قبل الإرسال — واحذف أي بيانات عملاء حسّاسة لا تريد مشاركتها.');
+  if (mask) {
+    dim('أرقام الهواتف والهويات في العيّنات مُخفاة — الشكل محفوظ وهو ما نحتاجه للمطابقة.');
+    dim('(للاحتفاظ بالقيم كما هي: أضِف --raw)');
+  }
+  dim(`لقطات الشاشة و HTML في ${OUT_DIR} — راجعها قبل مشاركة أي منها.`);
+  return summary;
+}
+
+/**
+ * أمر واحد يكفي: يفتح اللوحة، يلتقط روابط القوائم، يخمّن صفحات
+ * العقود والمركبات والحجوزات والعملاء والحسابات، ثم يصفها كلها.
+ */
+async function auto(args) {
+  const mask = !args.includes('--raw');
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  const picked = await withSession(async ({ context, baseUrl }) => {
+    const page = await context.newPage();
+    console.log(`\nفتح اللوحة ${baseUrl} …`);
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+
+    const links = await page.$$eval('a[href]', (nodes) =>
+      nodes
+        .map((a) => ({
+          text: a.textContent.trim().replace(/\s+/g, ' ').slice(0, 60),
+          href: a.getAttribute('href'),
+        }))
+        .filter((l) => l.href && !l.href.startsWith('javascript') && !l.href.startsWith('#')),
+    );
+    const seen = new Set();
+    const unique = links.filter((l) => !seen.has(l.href) && seen.add(l.href));
+    fs.writeFileSync(path.join(OUT_DIR, 'menu.json'), JSON.stringify(unique, null, 2), 'utf8');
+    await page.screenshot({ path: path.join(OUT_DIR, 'home.png'), fullPage: true });
+    ok(`${unique.length} رابطاً في اللوحة (menu.json)`);
+
+    // أول رابط مطابق لكل نوع يكفي
+    const chosen = {};
+    for (const link of unique) {
+      const kind = classify(link);
+      if (kind && !chosen[kind]) chosen[kind] = link;
+    }
+    await page.close();
+    return chosen;
+  });
+
+  const kinds = Object.keys(picked);
+  if (!kinds.length) {
+    warn('لم أتعرّف على صفحات من أسماء الروابط.');
+    dim('نفّذ: npm run eganis:inspect -- menu ثم أرسل لي menu.json وأحدّد الصفحات بنفسي.');
+    return;
+  }
+
+  console.log('\nالصفحات التي سأفحصها:');
+  for (const kind of kinds) console.log(`   ${kind.padEnd(11)} ${picked[kind].text} ${DIM}${picked[kind].href}${OFF}`);
+
+  const labels = {};
+  for (const kind of kinds) labels[picked[kind].href] = kind;
+
+  await scan(kinds.map((k) => picked[k].href), { mask, labels });
+
+  console.log('');
+  ok('جاهز — أرسل لي هذين الملفين:');
+  console.log(`   ${path.join(OUT_DIR, 'summary.json')}`);
+  console.log(`   ${path.join(OUT_DIR, 'menu.json')}`);
 }
 
 const [command, ...rest] = process.argv.slice(2);
@@ -238,15 +380,19 @@ const [command, ...rest] = process.argv.slice(2);
 const commands = {
   login,
   menu,
-  scan: () => scan(rest),
+  auto: () => auto(rest),
+  scan: () => scan(rest.filter((a) => !a.startsWith('--')), { mask: !rest.includes('--raw') }),
 };
 
 if (!commands[command]) {
   console.log(`
 الاستخدام:
-  npm run eganis:inspect -- login              تسجيل دخول يدوي مرة واحدة وحفظ الجلسة
-  npm run eganis:inspect -- menu               سرد صفحات اللوحة
-  npm run eganis:inspect -- scan /contracts    وصف جداول صفحة أو أكثر
+  npm run eganis:inspect -- login              (١) تسجيل دخول يدوي مرة واحدة وحفظ الجلسة
+  npm run eganis:inspect -- auto               (٢) اكتشاف الصفحات ووصفها تلقائياً — يكفي عادةً
+
+  npm run eganis:inspect -- menu               سرد كل روابط اللوحة (عند فشل الاكتشاف)
+  npm run eganis:inspect -- scan /contracts    وصف صفحة أو أكثر بنفسك
+  أضِف --raw لعدم إخفاء أرقام الهواتف والهويات في العيّنات
 `);
   process.exit(1);
 }
