@@ -311,13 +311,26 @@ const tools = [
   {
     name: 'send_statement',
     description:
-      'تجهيز كشف حساب العميل في محادثته على واتساب. افتراضياً يُحفظ كمسوّدة؛ مرّر send=true للإرسال الفعلي بعد موافقة المستخدم.',
+      'تجهيز كشف حساب العميل في محادثته على واتساب. as=pdf يرسله ملفاً بهوية الشركة، والافتراضي نص. يُحفظ كمسوّدة إلا إذا مرّرت send=true بعد موافقة المستخدم.',
     inputSchema: {
       type: 'object',
-      properties: { q: str('اسم العميل أو هاتفه'), send: { type: 'boolean', description: 'إرسال فعلي' } },
+      properties: {
+        q: str('اسم العميل أو هاتفه'),
+        as: str('pdf لإرساله ملفاً · text لإرساله رسالة نصية (الافتراضي)'),
+        caption: str('نص مرافق للملف'),
+        send: { type: 'boolean', description: 'إرسال فعلي' },
+      },
       required: ['q'],
     },
     run: (args) => api('POST', '/api/accounting/send-statement', { body: args }),
+  },
+  {
+    name: 'statement_pdf',
+    description:
+      'توليد كشف حساب العميل كملف PDF بهوية الشركة وحفظه في مكتبة الملفات، ويعيد رابطه ليُفتح أو يُرسل.',
+    inputSchema: { type: 'object', properties: { q: str('اسم العميل أو هاتفه') }, required: ['q'] },
+    run: (args) =>
+      api('POST', '/api/accounting/send-statement', { body: { ...args, as: 'pdf', send: false } }),
   },
 
   // ===== واتساب =====

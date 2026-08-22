@@ -683,7 +683,9 @@ async function viewAccounting() {
         </div>
 
         <div class="row" style="margin-top:14px">
-          <button class="btn" id="acc-send">إرسال الكشف للعميل</button>
+          <button class="btn" id="acc-send-pdf">إرسال PDF على واتساب</button>
+          <button class="btn ghost" id="acc-pdf">فتح / حفظ PDF</button>
+          <button class="btn ghost" id="acc-send">إرسال الكشف نصاً</button>
           <button class="btn ghost" id="acc-copy">نسخ الكشف</button>
           <button class="btn ghost" id="acc-add">إضافة حركة</button>
           ${stmt.status !== 'settled' ? '<button class="btn ghost" id="acc-settle">تصفية الحساب</button>' : ''}
@@ -718,6 +720,33 @@ async function viewAccounting() {
     document.getElementById('acc-copy').onclick = async () => {
       await navigator.clipboard.writeText(stmt.text).catch(() => {});
       toast('تم نسخ الكشف');
+    };
+
+    // فتح الـ PDF في تبويب جديد: من هناك يحفظه المستخدم أو يشاركه مباشرة من الجوال
+    document.getElementById('acc-pdf').onclick = () => {
+      const url = `/api/accounting/statement.pdf?q=${encodeURIComponent(
+        state.accountingQuery,
+      )}&token=${encodeURIComponent(state.token)}`;
+      window.open(url, '_blank', 'noopener');
+    };
+
+    document.getElementById('acc-send-pdf').onclick = async (event) => {
+      const btn = event.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'جارِ تجهيز الملف…';
+      try {
+        const result = await api('/api/accounting/send-statement', {
+          method: 'POST',
+          body: { q: state.accountingQuery, as: 'pdf', send: false },
+        });
+        state.conversationId = result.conversationId;
+        toast(`تم تجهيز ${result.file.name} في محادثة العميل — أرسله من تبويب واتساب`);
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'إرسال PDF على واتساب';
+      }
     };
 
     document.getElementById('acc-send').onclick = async () => {

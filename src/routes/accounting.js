@@ -2,6 +2,8 @@ import { readJson, HttpError } from '../lib/http.js';
 import * as accounting from '../core/accounting.js';
 import * as inbox from '../core/inbox.js';
 import * as fx from '../core/fx.js';
+import * as files from '../core/files.js';
+import * as statementPdf from '../core/statement-pdf.js';
 
 export function registerAccountingRoutes(router) {
   /** أنواع الحركات المتاحة — تستخدمها الواجهة لبناء القائمة */
@@ -60,7 +62,33 @@ export function registerAccountingRoutes(router) {
     );
   });
 
-  /** إرسال كشف الحساب للعميل على واتساب (يُحفظ كمسوّدة أو يُرسل مباشرة) */
+  /** صفحة الكشف جاهزة للطباعة — تُحفظ PDF من المتصفّح مباشرة */
+  router.get('/api/accounting/statement.html', async ({ query, res }) => {
+    const stmt = await accounting.statement(query.get('q') || '');
+    const html = statementPdf.statementHtml(stmt);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(html);
+    return null; // تمّ الرد يدوياً
+  });
+
+  /** كشف الحساب كملف PDF جاهز للإرسال */
+  router.get('/api/accounting/statement.pdf', async ({ query, res }) => {
+    const { buffer, file } = await statementPdf.statementPdf(query.get('q') || '');
+    res.writeHead(200, {
+      'Content-Type': 'application/pdf',
+      'Content-Length': buffer.length,
+      // inline = يفتح في المتصفّح · attachment = ينزل مباشرة
+      'Content-Disposition': `${query.get('download') === '1' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      'Cache-Control': 'no-store',
+    });
+    res.end(buffer);
+    return null;
+  });
+
+  /**
+   * إرسال كشف الحساب للعميل على واتساب.
+   * as=pdf يرسله ملفاً، والافتراضي نص. send=true يرسل فعلياً، وإلا يُحفظ كمسوّدة.
+   */
   router.post('/api/accounting/send-statement', async ({ req, actor }) => {
     const body = await readJson(req);
     const stmt = await accounting.statement(body.q || '');
@@ -71,11 +99,34 @@ export function registerAccountingRoutes(router) {
     const text = accounting.statementText(stmt);
     const conversation = inbox.upsertConversation(phone, stmt.customer.name);
 
+    if (body.as === 'pdf') {
+      const { file } = await statementPdf.statementPdf(body.q);
+      const caption =
+        body.caption ?? `كشف حسابك لدى CALL & RENT حتى ${String(stmt.generatedAt).slice(0, 10)}`;
+
+      if (body.send === true) {
+        const sent = await inbox.sendDocument(conversation.id, file, caption, actor);
+        return { ok: true, sent: true, as: 'pdf', conversationId: conversation.id, file: files.describe(file), ...sent };
+      }
+      const draft = inbox.saveDraft(conversation.id, `${caption}\n📎 ${file.name}`, actor, {
+        kind: 'statement_pdf',
+        fileId: file.id,
+      });
+      return {
+        ok: true,
+        sent: false,
+        as: 'pdf',
+        conversationId: conversation.id,
+        messageId: draft.id,
+        file: files.describe(file),
+      };
+    }
+
     if (body.send === true) {
       await inbox.sendMessage(conversation.id, text, actor);
-      return { ok: true, sent: true, conversationId: conversation.id, text };
+      return { ok: true, sent: true, as: 'text', conversationId: conversation.id, text };
     }
     const draft = inbox.saveDraft(conversation.id, text, actor, { kind: 'statement' });
-    return { ok: true, sent: false, conversationId: conversation.id, messageId: draft.id, text };
+    return { ok: true, sent: false, as: 'text', conversationId: conversation.id, messageId: draft.id, text };
   });
 }

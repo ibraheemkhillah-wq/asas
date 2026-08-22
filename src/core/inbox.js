@@ -98,6 +98,38 @@ export async function sendMessage(conversationId, body, author = 'agent') {
   return { ok: true, id: result.id, conversationId };
 }
 
+/** إرسال ملف (PDF مثلاً) في محادثة العميل وتسجيله في سجل المحادثة */
+export async function sendDocument(conversationId, file, caption = '', author = 'agent') {
+  const conversation = getConversation(conversationId);
+  const driver = whatsapp();
+  if (typeof driver.sendDocument !== 'function') {
+    throw new HttpError(501, `سائق واتساب "${driver.name}" لا يدعم إرسال الملفات`);
+  }
+
+  const result = await driver.sendDocument(conversation.phone, {
+    path: file.path,
+    filename: file.name,
+    mime: file.mime,
+    caption,
+  });
+
+  const body = caption ? `${caption}\n📎 ${file.name}` : `📎 ${file.name}`;
+  run(
+    `INSERT INTO messages (conversation_id, direction, body, wa_message_id, status, author, meta)
+     VALUES (?, 'out', ?, ?, 'sent', ?, ?)`,
+    [conversationId, body, result.id || null, author, JSON.stringify({ fileId: file.id, kind: 'document' })],
+  );
+  touchConversation(conversationId, body);
+  record({
+    actor: author,
+    action: 'whatsapp_send_document',
+    target: conversation.phone,
+    payload: { file: file.name, caption },
+    result: { id: result.id },
+  });
+  return { ok: true, id: result.id, conversationId, fileId: file.id };
+}
+
 export function setConversationStatus(id, status, assignedTo = null) {
   const allowed = ['open', 'pending', 'closed'];
   if (!allowed.includes(status)) throw new HttpError(400, `حالة غير مدعومة: ${status}`);

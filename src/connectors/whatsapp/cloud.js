@@ -3,6 +3,7 @@
  * يتطلّب: WA_PHONE_NUMBER_ID، WA_TOKEN، WA_VERIFY_TOKEN، WA_APP_SECRET
  */
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { config } from '../../config.js';
 import { fetchWithTimeout, HttpError } from '../../lib/http.js';
 
@@ -54,6 +55,49 @@ export function createCloudDriver() {
         throw new HttpError(502, `فشل إرسال رسالة واتساب (${res.status})`, json);
       }
       return { id: json.messages?.[0]?.id || null, raw: json };
+    },
+
+    /**
+     * إرسال ملف (PDF مثلاً) كمستند على واتساب.
+     * خطوتان كما يتطلّب Cloud API: رفع الملف للحصول على media id، ثم إرسال رسالة من نوع document.
+     */
+    async sendDocument(to, { path: filePath, filename, mime = 'application/pdf', caption = '' }) {
+      if (!phoneNumberId || !token) throw new HttpError(500, 'إعدادات واتساب غير مكتملة');
+      const buffer = await fs.promises.readFile(filePath);
+
+      const form = new FormData();
+      form.append('messaging_product', 'whatsapp');
+      form.append('type', mime);
+      form.append('file', new Blob([buffer], { type: mime }), filename);
+
+      const upload = await fetchWithTimeout(
+        `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/media`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form },
+        60000,
+      );
+      const uploaded = await upload.json().catch(() => ({}));
+      if (!upload.ok || !uploaded.id) {
+        throw new HttpError(502, `فشل رفع الملف إلى واتساب (${upload.status})`, uploaded);
+      }
+
+      const res = await fetchWithTimeout(
+        `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: String(to).replace(/\D/g, ''),
+            type: 'document',
+            document: { id: uploaded.id, filename, caption: caption || undefined },
+          }),
+        },
+        30000,
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new HttpError(502, `فشل إرسال المستند (${res.status})`, json);
+      return { id: json.messages?.[0]?.id || null, mediaId: uploaded.id, raw: json };
     },
 
     /** تحقق ترويسة الاشتراك في الويبهوك (GET) */

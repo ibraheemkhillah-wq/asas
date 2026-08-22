@@ -17,6 +17,11 @@ export function createMockWhatsappDriver() {
       return { id: `mock-${Date.now()}`, mocked: true };
     },
 
+    async sendDocument(to, { filename, caption = '' }) {
+      log.info(`whatsapp(mock) → ${to}: [مستند] ${filename}${caption ? ` — ${caption}` : ''}`);
+      return { id: `mock-doc-${Date.now()}`, mocked: true };
+    },
+
     verifySubscription() {
       return null;
     },

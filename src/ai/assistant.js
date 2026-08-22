@@ -13,6 +13,7 @@ import { eganis } from '../connectors/eganis/index.js';
 import * as ops from '../core/ops.js';
 import * as accounting from '../core/accounting.js';
 import * as fx from '../core/fx.js';
+import * as statementPdf from '../core/statement-pdf.js';
 import * as files from '../core/files.js';
 
 let client = null;
@@ -95,6 +96,27 @@ export function buildTools(session) {
       run: async (a) => {
         const stmt = await accounting.statement(a.q);
         return { ...stmt, text: accounting.statementText(stmt) };
+      },
+    },
+    {
+      name: 'statement_pdf',
+      description:
+        'توليد كشف حساب العميل كملف PDF بهوية الشركة، وإرساله لي في المحادثة. استخدمه عندما يطلب المستخدم كشفاً جاهزاً للإرسال للعميل.',
+      input_schema: {
+        type: 'object',
+        properties: { q: str('اسم العميل أو هاتفه') },
+        required: ['q'],
+      },
+      run: async (a) => {
+        const { file, statement } = await statementPdf.statementPdf(a.q);
+        const described = files.describe(file);
+        session.attachments.push(described); // يصل الملف للمستخدم داخل المحادثة
+        return {
+          file: { id: described.id, name: described.name },
+          customer: statement.customer.name,
+          net: statement.netText,
+          note: 'وصل ملف الكشف للمستخدم في المحادثة',
+        };
       },
     },
     {
@@ -238,6 +260,7 @@ const SYSTEM_PROMPT = `أنت مساعد التشغيل في شركة CALL & REN
 - ابدأ بالجواب المباشر ثم التفاصيل. الأرقام في جدول أو نقاط قصيرة عند تعدّدها.
 - عند طلب مستند أو صورة: ابحث بـ list_documents ثم أرسِل الملفات فعلياً بـ send_files، ولا تكتفِ بذكر وجودها.
 - عند سؤال عن حساب عميل: استخدم customer_statement واذكر الرقم النهائي أولاً (كم له أو كم عليه).
+- عند طلب كشف جاهز للإرسال للعميل: استخدم statement_pdf، فيصل الملف للمستخدم في المحادثة.
 
 ## العملات
 الشركة تتعامل بالليرة التركية والدولار معاً، وبعض العملاء لهم أرصدة بالعملتين في آن واحد.
