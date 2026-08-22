@@ -8,8 +8,20 @@ import { record } from './audit.js';
 import * as fx from './fx.js';
 import { all, run } from '../db.js';
 
-const dayKey = (value) => new Date(value).toISOString().slice(0, 10);
-const today = () => new Date().toISOString().slice(0, 10);
+/**
+ * «اليوم» بتوقيت الشركة لا بتوقيت غرينتش: عقد ينتهي الساعة ٩ صباحاً في
+ * إسطنبول يجب أن يظهر في إرجاعات اليوم، لا في اليوم السابق أو التالي.
+ */
+const localDay = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const dayKey = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : localDay(date);
+};
+const today = () => localDay(new Date());
 
 /** لوحة اليوم: تسليمات، استرجاعات، متأخرات، أسطول، تنبيهات */
 export async function overview() {

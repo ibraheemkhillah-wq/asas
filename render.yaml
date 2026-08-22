@@ -1,0 +1,47 @@
+# نشر التطبيق من المتصفّح (يعمل من الجوال) — render.com
+#
+# على Render: New ← Blueprint ← اختر هذا المستودع. سيقرأ هذا الملف ويبني كل شيء.
+# القرص الدائم ضروري: فيه قاعدة البيانات والملفات وجلسة eganis.
+services:
+  - type: web
+    name: callrent-ops
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # الخطة المجانية بلا قرص دائم — لا تكفي هنا
+    region: frankfurt # الأقرب إلى إسطنبول
+    healthCheckPath: /api/health
+    disk:
+      name: callrent-data
+      mountPath: /app/data
+      sizeGB: 5
+    envVars:
+      - key: APP_TOKEN
+        generateValue: true # يولّد Render كلمة سر قوية — انسخها من لوحته
+      - key: TZ
+        value: Europe/Istanbul
+      - key: DB_PATH
+        value: /app/data/callrent.db
+      - key: FX_SOURCE
+        value: harem
+      - key: FX_USD_TRY
+        value: '48' # سعر احتياطي عند انقطاع الشبكة
+      - key: EGANIS_DRIVER
+        value: mock # غيّرها إلى browser بعد إدخال بيانات eganis
+      - key: EGANIS_BASE_URL
+        sync: false # تُدخلها أنت في لوحة Render
+      - key: EGANIS_USERNAME
+        sync: false
+      - key: EGANIS_PASSWORD
+        sync: false
+      - key: EGANIS_SESSION_FILE
+        value: /app/data/eganis-session.json
+      - key: WHATSAPP_DRIVER
+        value: mock
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_TOKEN
+        sync: false
+      - key: WA_VERIFY_TOKEN
+        value: callrent-verify
+      - key: ANTHROPIC_API_KEY
+        sync: false

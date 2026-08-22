@@ -83,14 +83,34 @@ EGANIS_PASSWORD=...
 
 ### ب) `browser` — عندما لا يتوفّر API (يكفيه دخولك العادي للوحة)
 
-يفتح لوحة eganis بمتصفّح آلي ويقرأ الجداول حسب محدِّدات (selectors) تضعها في القسم
-`browser` من ملف الإعداد. التثبيت:
+**تلقائي بلا إعداد:** يفتح لوحتك، يتعرّف على صفحاتها من أسمائها التركية
+(`Sözleşmeler`، `Araçlar`، `Rezervasyonlar`، `Müşteriler`، `Cari Hesap`)، ثم يفهم
+أعمدة الجداول بالمطابقة: `Sözleşme No` → `no`، `Depozito` → `deposit`،
+`Para Birimi` → `currency`… ويحوّل الأرقام التركية (`3.000,50`) والتواريخ
+(`18.08.2026`) والحالات (`Açık` → مفتوح · `Kirada` → مؤجّرة) إلى صيغ التطبيق.
+المنطق كله في `src/connectors/eganis/auto-map.js` ومغطّى باختبارات.
 
-```bash
-npm i playwright && npx playwright install chromium
+كل ما يلزم في `.env`:
+
+```env
+EGANIS_DRIVER=browser
+EGANIS_BASE_URL=https://panel.eganis.com.tr
+EGANIS_USERNAME=...
+EGANIS_PASSWORD=...
 ```
 
-**الخطوات بالترتيب** (على كمبيوتر فيه شاشة، ثم تُنقل النتيجة للخادم) —
+وإن أردت التحكم اليدوي، عرّف `browser.pages` في `config/eganis.json` فيتقدّم على الاكتشاف.
+
+**من الجوال بلا كمبيوتر:** [`docs/deploy-mobile.md`](docs/deploy-mobile.md) —
+نشر من المتصفّح بلا سطر أوامر.
+
+التثبيت للتشغيل المحلي:
+
+```bash
+npm i playwright   # أو استخدم playwright-core المرفقة مع Chrome مثبَّت على النظام
+```
+
+**لضبط المحدِّدات يدوياً أو تشخيص لوحة غير معتادة** — الخطوات بالترتيب (على كمبيوتر فيه شاشة، ثم تُنقل النتيجة للخادم) —
 الدليل المفصّل للمستخدم: [`docs/eganis-browser-steps.md`](docs/eganis-browser-steps.md)
 
 ```bash

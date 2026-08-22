@@ -49,6 +49,10 @@ export const config = {
     // جلسة متصفّح محفوظة بتسجيل دخول يدوي (وضع browser)
     sessionFile: process.env.EGANIS_SESSION_FILE || './data/eganis-session.json',
     timeoutMs: Number(process.env.EGANIS_TIMEOUT_MS || 20000),
+    // وضع المتصفّح: مدة الاحتفاظ بنتيجة الصفحة قبل إعادة قراءتها من eganis
+    cacheSeconds: Number(process.env.EGANIS_CACHE_SECONDS || 20),
+    // مهلة انتظار الجداول التي تُحمَّل بجافاسكربت
+    pageWaitMs: Number(process.env.EGANIS_PAGE_WAIT_MS || 3000),
   },
 
   whatsapp: {

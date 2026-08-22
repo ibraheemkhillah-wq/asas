@@ -8,6 +8,7 @@ const state = {
   conversationId: null,
   accountingQuery: '',
   accountingCustomer: null,
+  lastRender: 0,
 };
 
 // ===== أدوات =====
@@ -1105,11 +1106,39 @@ async function render() {
   app.innerHTML = '<div class="empty">جارِ التحميل…</div>';
   try {
     await views[state.view]();
+    state.lastRender = Date.now();
   } catch (err) {
     app.innerHTML = `<div class="card"><h2>تعذّر التحميل</h2><p class="muted">${esc(err.message)}</p></div>`;
     toast(err.message, true);
   }
 }
+
+/**
+ * تحديث تلقائي: أي تعديل تعمله على eganis يظهر هنا بلا ضغط تحديث.
+ * يقتصر على الشاشات التي تعرض بيانات فقط — لا نُعيد بناء شاشة فيها نموذج
+ * أو رسالة نصف مكتوبة.
+ */
+const LIVE_VIEWS = ['today', 'contracts', 'fleet'];
+const LIVE_EVERY_MS = 30000;
+
+setInterval(async () => {
+  if (!LIVE_VIEWS.includes(state.view)) return;
+  if (document.hidden) return; // التطبيق في الخلفية — لا داعي
+  if (document.activeElement?.matches('input, select, textarea')) return;
+  if (Date.now() - (state.lastRender || 0) < LIVE_EVERY_MS - 1000) return;
+
+  try {
+    await views[state.view]();
+    state.lastRender = Date.now();
+  } catch {
+    /* انقطاع مؤقت — نحاول في الدورة التالية بلا إزعاج */
+  }
+}, LIVE_EVERY_MS);
+
+// عند العودة للتطبيق من الخلفية: حدّث فوراً بدل انتظار الدورة
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && LIVE_VIEWS.includes(state.view)) render();
+});
 
 async function refreshStatus() {
   try {

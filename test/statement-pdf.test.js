@@ -14,6 +14,7 @@ process.env.FX_USD_TRY = '48.05';
 
 const pdf = await import('../src/core/statement-pdf.js');
 const acc = await import('../src/core/accounting.js');
+const { findChrome } = await import('../src/lib/chrome.js');
 
 test('صفحة الكشف تحتوي كل ما يحتاجه العميل', async () => {
   const stmt = await acc.statement('أحمد نصار');
@@ -41,7 +42,7 @@ test('كشف عميل غير موجود يرفض التوليد', async () => {
 });
 
 // التوليد الفعلي يحتاج متصفّحاً على الجهاز — يُتخطّى إن لم يوجد
-test('توليد ملف PDF فعلي وحفظه في مكتبة الملفات', { skip: !pdf.findChrome() }, async () => {
+test('توليد ملف PDF فعلي وحفظه في مكتبة الملفات', { skip: !findChrome() }, async () => {
   const { file, buffer, statement } = await pdf.statementPdf('أحمد نصار');
 
   assert.equal(buffer.subarray(0, 4).toString(), '%PDF');

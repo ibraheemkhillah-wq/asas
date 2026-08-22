@@ -26,7 +26,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { config } from '../src/config.js';
-import { findChrome } from '../src/core/statement-pdf.js';
+import { findChrome } from '../src/lib/chrome.js';
+import { classifyLink } from '../src/connectors/eganis/auto-map.js';
 
 const OUT_DIR = path.resolve(process.cwd(), 'data/eganis-inspect');
 const SESSION_FILE = path.resolve(process.cwd(), 'data/eganis-session.json');
@@ -42,13 +43,16 @@ const warn = (t) => console.log(`${YELLOW}!${OFF} ${t}`);
 const dim = (t) => console.log(`${DIM}  ${t}${OFF}`);
 
 async function playwright() {
-  try {
-    return await import('playwright');
-  } catch {
-    bad('حزمة playwright غير مثبّتة.');
-    dim('نفّذ: npm i playwright');
-    process.exit(1);
+  for (const pkg of ['playwright', 'playwright-core']) {
+    try {
+      return await import(pkg);
+    } catch {
+      /* نجرّب التالي */
+    }
   }
+  bad('حزمة playwright غير مثبّتة.');
+  dim('نفّذ: npm i playwright');
+  process.exit(1);
 }
 
 /**
@@ -194,25 +198,6 @@ function redactDescribed(described, enabled) {
 }
 
 /** الصفحات التي تهمّنا، بكلمات تركية وإنجليزية كما تسمّيها لوحات eganis */
-// الترتيب مقصود: الأكثر تحديداً أولاً. تجنّبنا كلمات قصيرة تتداخل
-// (مثل "car" التي تقع داخل "cari hesap" وتعني الحساب لا المركبة).
-const PAGE_HINTS = [
-  { kind: 'ledger', words: ['cari', 'hesap', 'tahsilat', 'odeme', 'ödeme', 'kasa', 'ekstre', 'account', 'payment'] },
-  { kind: 'contracts', words: ['sozlesme', 'sözleşme', 'kiralama', 'contract', 'rental'] },
-  { kind: 'bookings', words: ['rezervasyon', 'reservation', 'booking'] },
-  { kind: 'customers', words: ['musteri', 'müşteri', 'customer', 'client'] },
-  { kind: 'vehicles', words: ['arac', 'araç', 'vehicle', 'filo', 'fleet', 'plaka'] },
-  { kind: 'documents', words: ['belge', 'dosya', 'evrak', 'document', 'foto', 'resim'] },
-];
-
-function classify(link) {
-  const haystack = `${link.text} ${link.href}`.toLowerCase();
-  for (const hint of PAGE_HINTS) {
-    if (hint.words.some((w) => haystack.includes(w))) return hint.kind;
-  }
-  return null;
-}
-
 /** وصف جداول صفحة: الأعمدة، عدد الصفوف، عيّنة صف */
 async function describePage(page) {
   return page.evaluate(() => {
@@ -347,7 +332,7 @@ async function auto(args) {
     // أول رابط مطابق لكل نوع يكفي
     const chosen = {};
     for (const link of unique) {
-      const kind = classify(link);
+      const kind = classifyLink(link);
       if (kind && !chosen[kind]) chosen[kind] = link;
     }
     await page.close();
