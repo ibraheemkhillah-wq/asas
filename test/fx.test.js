@@ -26,6 +26,29 @@ test('توحيد أسماء العملات كما ترد من eganis أو من �
   assert.equal(fx.isCurrency('USD'), true);
 });
 
+test('قراءة الأرقام بالصيغة التركية والإنجليزية', () => {
+  assert.equal(fx.parseRateNumber('48,0500'), 48.05); // فاصلة عشرية تركية
+  assert.equal(fx.parseRateNumber('48.0500'), 48.05); // نقطة عشرية
+  assert.equal(fx.parseRateNumber('1.234,56'), 1234.56); // فواصل آلاف تركية
+  assert.equal(fx.parseRateNumber('1,234.56'), 1234.56); // فواصل آلاف إنجليزية
+  assert.equal(fx.parseRateNumber(48.05), 48.05);
+  assert.ok(Number.isNaN(fx.parseRateNumber('')));
+});
+
+test('التقاط سعر الدولار من استجابة حرم ألتين', () => {
+  const payload = {
+    data: {
+      USDTRY: { code: 'USDTRY', alis: '47,9500', satis: '48,0500', tarih: '14:57' },
+      EURTRY: { code: 'EURTRY', alis: '55,7520', satis: '56,0270' },
+    },
+  };
+  assert.equal(fx.pickHaremRate(payload, 'satis'), 48.05);
+  assert.equal(fx.pickHaremRate(payload, 'alis'), 47.95);
+  // بعض الاستجابات تأتي بنقطة عشرية أو بلا غلاف data
+  assert.equal(fx.pickHaremRate({ USDTRY: { satis: '48.0500' } }, 'satis'), 48.05);
+  assert.throws(() => fx.pickHaremRate({ data: { EURTRY: {} } }, 'satis'), /USDTRY/);
+});
+
 test('التحويل بين العملتين بسعر محدّد', () => {
   assert.equal(fx.convert(50, 'USD', 'TRY', 40), 2000);
   assert.equal(fx.convert(2000, 'TRY', 'USD', 40), 50);
@@ -33,9 +56,12 @@ test('التحويل بين العملتين بسعر محدّد', () => {
   assert.throws(() => fx.convert(50, 'USD', 'TRY', 0), /سعر الصرف/);
 });
 
-test('صياغة المبالغ والعرض المزدوج', () => {
-  assert.match(fx.fmt(2350, 'TRY'), /₺/);
-  assert.match(fx.fmt(50, 'USD'), /\$/);
+test('صياغة المبالغ والعرض المزدوج بأرقام إنجليزية', () => {
+  assert.equal(fx.fmt(2350, 'TRY'), '2,350 ₺');
+  assert.equal(fx.fmt(50, 'USD'), '50 $');
+  assert.equal(fx.fmt(1234567.891, 'TRY'), '1,234,567.89 ₺');
+  // لا أرقام عربية-هندية في أي مخرَج
+  assert.ok(!/[٠-٩]/.test(fx.dual({ TRY: 2350, USD: 50 })));
   const text = fx.dual({ TRY: 2350, USD: 50 });
   assert.match(text, /₺/);
   assert.match(text, /\$/);

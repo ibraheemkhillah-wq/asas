@@ -43,7 +43,7 @@ const SYMBOL = { TRY: '₺', USD: '$' };
 const cur = (c) => (String(c || '').toUpperCase() === 'USD' ? 'USD' : 'TRY');
 
 const money = (n, currency = 'TRY') =>
-  `<bdi dir="ltr">${Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 })} ${
+  `<bdi dir="ltr">${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${
     SYMBOL[cur(currency)]
   }</bdi>`;
 
@@ -60,7 +60,7 @@ const dualMoney = (amounts = {}, { hideZero = false } = {}) => {
 
 const fmtDate = (value) =>
   value
-    ? new Date(value).toLocaleString('ar-EG', {
+    ? new Date(value).toLocaleString('ar-EG-u-nu-latn', {
         day: '2-digit',
         month: '2-digit',
         hour: '2-digit',
@@ -521,15 +521,33 @@ function fxChip(rate) {
       rate?.error ? ` — ${esc(rate.error)}` : ''
     }</span>`;
   }
-  const age =
-    rate.ageMinutes > 0 ? `منذ ${rate.ageMinutes} دقيقة` : 'الآن';
+  const age = rate.ageMinutes > 0 ? `منذ ${rate.ageMinutes} دقيقة` : 'الآن';
   return `<span class="fx-chip ${rate.stale ? 'warn' : ''}">
-      سعر الصرف: <bdi dir="ltr">1 $ = ${Number(rate.rate).toLocaleString('ar-EG', {
+      سعر الصرف: <bdi dir="ltr">1 $ = ${Number(rate.rate).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
         maximumFractionDigits: 4,
       })} ₺</bdi>
       <span class="muted">· ${esc(rate.source)} · ${esc(age)}</span>
       <button class="btn small ghost" id="fx-refresh">تحديث</button>
     </span>`;
+}
+
+/** تحديث تلقائي لشريط السعر كل دقيقة ما دام التبويب مفتوحاً */
+let fxTicker = null;
+function startFxTicker(onRate) {
+  clearInterval(fxTicker);
+  fxTicker = setInterval(async () => {
+    const bar = document.querySelector('.fx-bar');
+    if (!bar) return clearInterval(fxTicker);
+    if (document.hidden) return;
+    try {
+      const rate = await api('/api/fx/rate');
+      bar.innerHTML = fxChip(rate);
+      onRate?.(rate);
+    } catch {
+      /* الشريط يبقى كما هو حتى المحاولة التالية */
+    }
+  }, 60000);
 }
 
 async function viewAccounting() {
@@ -594,6 +612,7 @@ async function viewAccounting() {
     };
   }
   bindFxRefresh();
+  startFxTicker(bindFxRefresh);
 
   async function loadStatement(q) {
     state.accountingQuery = q;

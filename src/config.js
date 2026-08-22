@@ -62,10 +62,20 @@ export const config = {
   fx: {
     // live = جلب السعر من المصادر · manual = اعتماد سعر الشركة الثابت
     mode: process.env.FX_MODE || 'live',
+    // المصدر المفضّل: harem | tcmb | erapi | frankfurter | custom
+    source: (process.env.FX_SOURCE || 'harem').toLowerCase(),
     manualRate: process.env.FX_USD_TRY || '',
     ttlMinutes: Number(process.env.FX_TTL_MINUTES || 15),
+    autoRefresh: bool(process.env.FX_AUTO_REFRESH, true),
+    // حرم ألتين — سعر السوق المعتمد في الصرافات
+    haremUrl: process.env.FX_HAREM_URL || 'https://www.haremaltin.com/dovizapi/v1/doviz',
+    haremField: (process.env.FX_HAREM_FIELD || 'satis').toLowerCase(), // satis | alis
     // الحقل المعتمد من بيانات البنك المركزي التركي
     tcmbField: process.env.FX_TCMB_FIELD || 'ForexSelling',
+    // مصدر تحدّده الشركة: أي رابط JSON ومسار الحقل داخله
+    customUrl: process.env.FX_CUSTOM_URL || '',
+    customPath: process.env.FX_CUSTOM_PATH || 'rate',
+    customName: process.env.FX_CUSTOM_NAME || '',
   },
 
   ai: {

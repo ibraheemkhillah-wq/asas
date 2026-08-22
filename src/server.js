@@ -10,6 +10,7 @@ import { registerWhatsappRoutes } from './routes/whatsapp.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { registerAccountingRoutes } from './routes/accounting.js';
 import { registerAssistantRoutes } from './routes/assistant.js';
+import * as fx from './core/fx.js';
 
 const router = createRouter();
 registerSystemRoutes(router);
@@ -70,10 +71,19 @@ server.listen(config.port, config.host, () => {
   log.info(`Call & Rent Ops يعمل على http://${config.host}:${config.port}`);
   log.info(`eganis=${config.eganis.driver} · whatsapp=${config.whatsapp.driver} · writes=${config.allowWrites}`);
   if (!config.appToken) log.warn('APP_TOKEN غير معرّف — الواجهة مفتوحة بدون حماية!');
+
+  // سعر الصرف: جلب أول سعر فوراً ثم تحديث دوري في الخلفية
+  if (config.fx.mode === 'manual') {
+    log.info(`سعر الصرف: يدوي (${config.fx.manualRate || 'غير مضبوط'})`);
+  } else {
+    log.info(`سعر الصرف: ${config.fx.source} · تحديث كل ${config.fx.ttlMinutes} دقيقة`);
+    fx.startAutoRefresh();
+  }
 });
 
 const shutdown = () => {
   log.info('إيقاف الخادم…');
+  fx.stopAutoRefresh();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 };

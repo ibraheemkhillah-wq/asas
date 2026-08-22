@@ -2,14 +2,15 @@
  * أسعار الصرف — الليرة التركية / الدولار.
  *
  * الترتيب:
- *   1) سعر يدوي إن ضبطته الشركة (FX_MODE=manual أو من الواجهة) — كثير من المكاتب
- *      تعتمد سعرها الخاص في محاسبة العملاء.
- *   2) البنك المركزي التركي TCMB — المصدر الرسمي في تركيا (يُحدَّث أيام العمل).
- *   3) مصادر احتياطية مجانية عند تعذّر الأول.
+ *   1) سعر يدوي إن ضبطته الشركة (FX_MODE=manual أو من الواجهة).
+ *   2) **حرم ألتين (haremaltin.com)** — سعر السوق المعتمد في الصرافات، وهو
+ *      المصدر الافتراضي لأن الشركة تحاسب عملاءها عليه.
+ *   3) البنك المركزي التركي TCMB ثم مصادر احتياطية عند تعذّر الأول.
  *   4) آخر سعر محفوظ (يُعلَّم بأنه قديم) حتى لا تتوقف الحسابات عند انقطاع الشبكة.
  *
  * كل سعر يُحفظ في قاعدة البيانات بوقته ومصدره، ويُعاد استخدامه ضمن مدة التخزين
- * المؤقت (FX_TTL_MINUTES) بدل استدعاء المصدر في كل طلب.
+ * المؤقت (FX_TTL_MINUTES) بدل استدعاء المصدر في كل طلب، ومهمة دورية تُحدّثه
+ * تلقائياً في الخلفية فيكون جاهزاً قبل أن يُطلب.
  */
 import { get, run, all } from '../db.js';
 import { config } from '../config.js';
@@ -41,6 +42,91 @@ export function normalizeCurrency(value, fallback = 'TRY') {
 }
 
 // ===== المصادر =====
+
+/**
+ * قراءة رقم قد يأتي بصيغة تركية («48,0500») أو إنجليزية («48.0500»)
+ * أو بفواصل آلاف («1.234,56»). آخر فاصلة/نقطة هي الفاصلة العشرية.
+ */
+export function parseRateNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+  const text = String(value ?? '').trim().replace(/[^\d.,-]/g, '');
+  if (!text) return NaN;
+  const lastComma = text.lastIndexOf(',');
+  const lastDot = text.lastIndexOf('.');
+  let normalized;
+  if (lastComma === -1 && lastDot === -1) {
+    normalized = text;
+  } else if (lastComma > lastDot) {
+    normalized = text.replace(/\./g, '').replace(',', '.');
+  } else {
+    normalized = text.replace(/,/g, '');
+  }
+  return Number(normalized);
+}
+
+/** التقاط سعر الدولار من أي شكل استجابة يعيده حرم ألتين */
+export function pickHaremRate(json, field = 'satis') {
+  const data = json?.data ?? json;
+  const row =
+    data?.USDTRY ??
+    data?.USDTRY_?.[0] ??
+    (data && typeof data === 'object'
+      ? Object.entries(data).find(([key]) => /^USD ?\/? ?TRY$|^USDTRY$/i.test(key))?.[1]
+      : null);
+  if (!row) throw new Error('لم يُعثر على USDTRY في استجابة حرم ألتين');
+  const raw = row[field] ?? row[field === 'satis' ? 'satış' : 'alış'] ?? row.satis ?? row.alis;
+  const rate = parseRateNumber(raw);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error(`قيمة ${field} غير صالحة: ${raw}`);
+  return rate;
+}
+
+/**
+ * حرم ألتين — سعر السوق الذي تعتمده الصرافات في إسطنبول.
+ * `satis` = سعر البيع (الأعلى، وهو ما يظهر في تطبيق حرم)، و`alis` = الشراء.
+ */
+async function fromHarem() {
+  const url = config.fx.haremUrl;
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        Referer: 'https://www.haremaltin.com/canli-piyasalar',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      },
+      body: 'dil_kodu=tr',
+    },
+    12000,
+  );
+  if (!res.ok) throw new Error(`حرم ألتين ${res.status}`);
+  const json = await res.json();
+  const field = config.fx.haremField; // satis افتراضياً
+  const rate = pickHaremRate(json, field);
+  // تحقّق من المعقولية حتى لا يدخل رقم مشوّه إلى الحسابات
+  if (rate < 1 || rate > 10000) throw new Error(`سعر غير معقول من حرم ألتين: ${rate}`);
+  return { rate, source: `حرم ألتين (${field === 'alis' ? 'شراء' : 'بيع'})` };
+}
+
+/** مصدر تحدّده الشركة بنفسها: أي رابط JSON + مسار الحقل داخل الاستجابة */
+async function fromCustom() {
+  const url = config.fx.customUrl;
+  if (!url) throw new Error('لا يوجد مصدر مخصّص');
+  const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, 12000);
+  if (!res.ok) throw new Error(`المصدر المخصّص ${res.status}`);
+  const json = await res.json();
+  const value = config.fx.customPath
+    .split('.')
+    .reduce((node, key) => (node == null ? node : node[key]), json);
+  const rate = parseRateNumber(value);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`لا يوجد سعر صالح في ${config.fx.customPath}`);
+  }
+  return { rate, source: config.fx.customName || 'مصدر الشركة المخصّص' };
+}
 
 /** البنك المركزي التركي — XML رسمي بلا مفتاح */
 async function fromTcmb() {
@@ -81,7 +167,22 @@ async function fromFrankfurter() {
   return { rate, source: 'frankfurter (ECB)' };
 }
 
-const PROVIDERS = [fromTcmb, fromErApi, fromFrankfurter];
+const SOURCES = {
+  harem: { fn: fromHarem, label: 'حرم ألتين (سعر السوق)' },
+  custom: { fn: fromCustom, label: 'مصدر الشركة المخصّص' },
+  tcmb: { fn: fromTcmb, label: 'البنك المركزي التركي' },
+  erapi: { fn: fromErApi, label: 'open.er-api.com' },
+  frankfurter: { fn: fromFrankfurter, label: 'frankfurter (ECB)' },
+};
+
+/** ترتيب المصادر: المفضّل أولاً ثم البقية كاحتياطي */
+function providerOrder() {
+  const preferred = String(config.fx.source || 'harem').toLowerCase();
+  const keys = Object.keys(SOURCES);
+  const ordered = [preferred, ...keys.filter((k) => k !== preferred)].filter((k) => SOURCES[k]);
+  // المصدر المخصّص لا يُجرَّب إلا إذا ضبطته الشركة
+  return ordered.filter((k) => k !== 'custom' || config.fx.customUrl);
+}
 
 // ===== التخزين =====
 
@@ -136,9 +237,9 @@ export async function getRate({ force = false } = {}) {
   }
 
   const failures = [];
-  for (const provider of PROVIDERS) {
+  for (const key of providerOrder()) {
     try {
-      const { rate, source } = await provider();
+      const { rate, source } = await SOURCES[key].fn();
       const saved = store(rate, source);
       log.info(`سعر الصرف: 1 دولار = ${rate} ليرة (${source})`);
       return {
@@ -150,7 +251,7 @@ export async function getRate({ force = false } = {}) {
         ageMinutes: 0,
       };
     } catch (err) {
-      failures.push(`${provider.name}: ${err.message}`);
+      failures.push(`${SOURCES[key].label}: ${err.message}`);
     }
   }
 
@@ -198,6 +299,68 @@ export function rateHistory(limit = 30) {
   return all('SELECT * FROM fx_rates ORDER BY id DESC LIMIT ?', [limit]);
 }
 
+/**
+ * فحص كل المصادر وإظهار ما أعادته كل واحدة — لتشخيص الربط على الخادم:
+ * أي مصدر يعمل، وأيها محجوب، وكم يبعد سعره عن غيره.
+ */
+export async function checkSources() {
+  const results = [];
+  for (const key of Object.keys(SOURCES)) {
+    if (key === 'custom' && !config.fx.customUrl) {
+      results.push({ key, label: SOURCES[key].label, ok: false, skipped: true, error: 'غير مضبوط' });
+      continue;
+    }
+    const startedAt = Date.now();
+    try {
+      const { rate, source } = await SOURCES[key].fn();
+      results.push({ key, label: SOURCES[key].label, ok: true, rate, source, ms: Date.now() - startedAt });
+    } catch (err) {
+      results.push({
+        key,
+        label: SOURCES[key].label,
+        ok: false,
+        error: err.message,
+        ms: Date.now() - startedAt,
+      });
+    }
+  }
+  const preferred = String(config.fx.source || 'harem').toLowerCase();
+  return {
+    preferred,
+    order: providerOrder(),
+    results,
+    working: results.filter((r) => r.ok).map((r) => r.key),
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+let refreshTimer = null;
+
+/** تحديث تلقائي في الخلفية كل FX_TTL_MINUTES حتى يكون السعر جاهزاً دائماً */
+export function startAutoRefresh() {
+  if (refreshTimer || config.fx.mode === 'manual' || !config.fx.autoRefresh) return null;
+  const everyMs = Math.max(1, config.fx.ttlMinutes) * 60000;
+
+  const tick = async () => {
+    try {
+      const rate = await getRate({ force: true });
+      log.info(`تحديث تلقائي لسعر الصرف: 1 $ = ${rate.rate} ₺ (${rate.source})`);
+    } catch (err) {
+      log.warn(`تعذّر التحديث التلقائي لسعر الصرف — ${err.message}`);
+    }
+  };
+
+  refreshTimer = setInterval(tick, everyMs);
+  refreshTimer.unref?.();
+  tick(); // جلب أول سعر فور الإقلاع
+  return refreshTimer;
+}
+
+export function stopAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
 // ===== التحويل والعرض =====
 
 /** تحويل مبلغ من عملة إلى أخرى بسعر محدّد */
@@ -210,11 +373,11 @@ export function convert(amount, from, to, rate) {
   return source === 'USD' ? round2(value * rate) : round2(value / rate);
 }
 
-/** صياغة مبلغ مع رمز عملته */
+/** صياغة مبلغ مع رمز عملته — الأرقام إنجليزية دائماً (1,234.56) */
 export function fmt(amount, currency) {
   const c = normalizeCurrency(currency);
   const value = Number(amount) || 0;
-  const text = value.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
+  const text = value.toLocaleString('en-US', { maximumFractionDigits: 2 });
   return c === 'USD' ? `${text} $` : `${text} ₺`;
 }
 

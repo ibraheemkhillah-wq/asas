@@ -20,6 +20,9 @@ export function registerAccountingRoutes(router) {
   /** سجل الأسعار المحفوظة */
   router.get('/api/fx/history', ({ query }) => fx.rateHistory(Number(query.get('limit') || 30)));
 
+  /** فحص كل مصادر السعر: أيها يعمل وأيها محجوب وكم يعطي — للتشخيص على الخادم */
+  router.get('/api/fx/check', () => fx.checkSources());
+
   /** اعتماد سعر صرف من الشركة يدوياً */
   router.post('/api/fx/manual-rate', async ({ req, actor }) => {
     const body = await readJson(req);

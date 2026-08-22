@@ -292,6 +292,13 @@ const tools = [
     run: (args) => api('GET', '/api/fx/rate', { query: args.force ? { force: '1' } : {} }),
   },
   {
+    name: 'fx_check_sources',
+    description:
+      'فحص كل مصادر سعر الصرف (حرم ألتين، البنك المركزي التركي، المصادر الاحتياطية): أيها يستجيب وأيها محجوب وكم يعطي. استخدمه لتشخيص أي مشكلة في تحديث السعر.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => api('GET', '/api/fx/check'),
+  },
+  {
     name: 'fx_set_rate',
     description: 'اعتماد سعر صرف من الشركة يدوياً (كم ليرة للدولار الواحد).',
     inputSchema: {

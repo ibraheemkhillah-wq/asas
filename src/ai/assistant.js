@@ -133,6 +133,13 @@ export function buildTools(session) {
       run: (a) => fx.getRate({ force: a.force === true }),
     },
     {
+      name: 'fx_check_sources',
+      description:
+        'فحص مصادر سعر الصرف: أيها يستجيب وأيها محجوب وكم يعطي — للتشخيص عند شكوى من السعر.',
+      input_schema: { type: 'object', properties: {} },
+      run: () => fx.checkSources(),
+    },
+    {
       name: 'list_documents',
       description:
         'المستندات والصور المرفوعة على eganis: عقود، بوالص تأمين، صور مركبات، هويات. صفِّ بالعميل أو رقم العقد أو لوحة المركبة أو النوع.',
