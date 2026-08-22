@@ -49,7 +49,27 @@ export function createBrowserDriver() {
     if (context) return { context, spec };
     const engine = await loadPlaywright();
     browser = await engine.launch({ headless: true });
-    context = await browser.newContext({ locale: 'ar' });
+
+    // (١) جلسة محفوظة مسبقاً بتسجيل دخول يدوي — الأفضل: تتجاوز رمز التحقق
+    // ولا تحتاج وضع كلمة السر في أي مكان.
+    const sessionFile = path.resolve(
+      process.cwd(),
+      spec.sessionFile || config.eganis.sessionFile || 'data/eganis-session.json',
+    );
+    if (fs.existsSync(sessionFile)) {
+      context = await browser.newContext({ storageState: sessionFile, locale: 'tr-TR' });
+      log.info(`eganis(browser): جلسة محفوظة (${path.basename(sessionFile)})`);
+      return { context, spec };
+    }
+
+    // (٢) تسجيل دخول آلي بالمحدِّدات المعرّفة في ملف الربط
+    if (!spec.usernameSelector || !spec.passwordSelector) {
+      throw new HttpError(
+        500,
+        'لا توجد جلسة محفوظة ولا محدِّدات تسجيل دخول. نفّذ: npm run eganis:inspect -- login',
+      );
+    }
+    context = await browser.newContext({ locale: 'tr-TR' });
     const page = await context.newPage();
     log.info('eganis(browser): تسجيل الدخول…');
     await page.goto(`${config.eganis.baseUrl}${spec.loginPath || '/'}`, { waitUntil: 'domcontentloaded' });

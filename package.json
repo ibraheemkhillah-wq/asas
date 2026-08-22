@@ -12,7 +12,9 @@
     "dev": "node --watch --no-warnings=ExperimentalWarning src/server.js",
     "seed": "node --no-warnings=ExperimentalWarning scripts/seed.js",
     "mcp": "node --no-warnings=ExperimentalWarning src/mcp/server.js",
-    "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js"
+    "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js",
+    "eganis:check": "node --no-warnings=ExperimentalWarning scripts/eganis-check.js",
+    "eganis:inspect": "node --no-warnings=ExperimentalWarning scripts/eganis-inspect.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",

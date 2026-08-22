@@ -46,6 +46,8 @@ export const config = {
     auth: process.env.EGANIS_AUTH || 'bearer',
     apiKeyHeader: process.env.EGANIS_API_KEY_HEADER || 'X-API-KEY',
     endpointsFile: process.env.EGANIS_ENDPOINTS_FILE || './config/eganis.json',
+    // جلسة متصفّح محفوظة بتسجيل دخول يدوي (وضع browser)
+    sessionFile: process.env.EGANIS_SESSION_FILE || './data/eganis-session.json',
     timeoutMs: Number(process.env.EGANIS_TIMEOUT_MS || 20000),
   },
 
