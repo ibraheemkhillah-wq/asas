@@ -356,10 +356,19 @@ export function createHttpDriver() {
    * ولأن القراءة بعدها تجري بـ HTTP، لا يبقى متصفّح مفتوحاً: ثوانٍ معدودة
    * مرة كل جلسة، لا مئات الميجابايتات دائمة.
    */
-  async function loginViaBrowser(form) {
-    const { username, password } = config.eganis;
-    const { findChrome } = await import('../../lib/chrome.js');
+  const CHROME_ARGS = [
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-extensions',
+    '--blink-settings=imagesEnabled=false',
+    '--js-flags=--max-old-space-size=192',
+    '--mute-audio',
+    '--no-first-run',
+  ];
 
+  async function chromium() {
+    const { findChrome } = await import('../../lib/chrome.js');
     let playwright = null;
     for (const pkg of ['playwright', 'playwright-core']) {
       try {
@@ -370,24 +379,122 @@ export function createHttpDriver() {
       }
     }
     if (!playwright) throw new HttpError(500, 'حزمة playwright غير مثبّتة');
-
     const executablePath = findChrome();
     if (!executablePath) throw new HttpError(500, 'لا يوجد متصفّح على الخادم');
+    return { playwright, executablePath };
+  }
+
+  /**
+   * جلسة متصفّح مؤقّتة تحمل كوكيز جلستنا.
+   *
+   * لبعض اللوحات جداول تُبنى بجافاسكربت بعد تحميل الصفحة (DataTables وأمثالها)،
+   * فلا يجد فيها القارئ النصّي شيئاً. هنا نعرض الصفحة كما يعرضها المتصفّح.
+   * تُفتح لدفعة صفحات ثم تُغلق — لا متصفّح مقيم يأكل ذاكرة الخطة الصغيرة.
+   */
+  async function withBrowser(fn) {
+    const { playwright, executablePath } = await chromium();
+    const browser = await playwright.chromium.launch({ executablePath, args: CHROME_ARGS });
+    try {
+      const context = await browser.newContext({ locale: 'tr-TR', userAgent: UA });
+      // كوكيز جلستنا الحالية حتى لا يحتاج المتصفّح لتسجيل دخول جديد
+      const { hostname } = new URL(base());
+      await context.addCookies(
+        [...jar.map].map(([name, value]) => ({ name, value, domain: hostname, path: '/' })),
+      );
+      const page = await context.newPage();
+      return await fn(page);
+    } finally {
+      await browser.close().catch(() => {});
+    }
+  }
+
+  /**
+   * عرض الصفحة، مع التقاط العنوان الذي جلبت منه بياناتها.
+   *
+   * هذا هو بيت القصيد: الصفحة التي تُبنى بجافاسكربت تطلب بياناتها من عنوان
+   * JSON. إن عرفناه مرّة، قرأنا منه بعدها مباشرةً بـ HTTP — فتصير المزامنة
+   * الحيّة أجزاء من الثانية بلا متصفّح، بدل أربع ثوانٍ ومئة ميجا كل مرّة.
+   */
+  async function renderHtml(page, url) {
+    const dataUrls = [];
+    const origin = new URL(base()).origin;
+
+    const onResponse = (res) => {
+      const type = res.headers()['content-type'] || '';
+      if (!type.includes('json')) return;
+      if (!res.url().startsWith(origin)) return;
+      if (res.request().method() !== 'GET') return;
+      dataUrls.push(res.url());
+    };
+    page.on('response', onResponse);
+
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      // ننتظر ظهور صفّ بيانات، وإلا نكتفي بمهلة قصيرة
+      await page
+        .waitForSelector('table tbody tr td', { timeout: config.eganis.pageWaitMs + 4000 })
+        .catch(() => {});
+      await page.waitForTimeout(400);
+      return { html: await page.content(), dataUrls };
+    } finally {
+      page.off('response', onResponse);
+    }
+  }
+
+  /**
+   * تحويل استجابة JSON إلى ترويسة وصفوف — بأي شكل جاءت.
+   * اللوحات تختلف: مصفوفة كائنات، أو {data:[…]}، أو ترويسة وصفوف صريحة.
+   */
+  function jsonToTable(json) {
+    if (!json) return null;
+    if (Array.isArray(json.headers) && Array.isArray(json.rows)) {
+      return { headers: json.headers.map(String), rows: json.rows.map((r) => r.map(String)) };
+    }
+
+    const list = Array.isArray(json)
+      ? json
+      : Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.aaData)
+          ? json.aaData
+          : Array.isArray(json.items)
+            ? json.items
+            : Array.isArray(json.rows)
+              ? json.rows
+              : null;
+    if (!list?.length) return null;
+
+    // صفوف كمصفوفات: لا ترويسة معنا، فلا تُفهم أعمدتها
+    if (Array.isArray(list[0])) return null;
+    if (typeof list[0] !== 'object') return null;
+
+    const headers = [...new Set(list.flatMap((row) => Object.keys(row)))];
+    const cell = (v) =>
+      v === null || v === undefined ? '' : typeof v === 'object' ? '' : String(v);
+    return { headers, rows: list.map((row) => headers.map((h) => cell(row[h]))) };
+  }
+
+  /** قراءة جدول من عنوان JSON عرفناه سابقاً */
+  async function tableFromDataUrl(url) {
+    const res = await request(url);
+    if (res.status >= 400) throw new Error(`مصدر البيانات ${res.status}`);
+    let json;
+    try {
+      json = JSON.parse(res.html);
+    } catch {
+      throw new Error('مصدر البيانات لم يعد يُرجع JSON');
+    }
+    const table = jsonToTable(json);
+    if (!table?.rows.length) throw new Error('مصدر البيانات بلا صفوف');
+    return table;
+  }
+
+  async function loginViaBrowser(form) {
+    const { username, password } = config.eganis;
+    const { playwright, executablePath } = await chromium();
 
     log.info('eganis(http): الدخول عبر المتصفّح (مصافحة واحدة)');
-    const browser = await playwright.chromium.launch({
-      executablePath,
-      args: [
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--blink-settings=imagesEnabled=false',
-        '--js-flags=--max-old-space-size=192',
-        '--mute-audio',
-        '--no-first-run',
-      ],
-    });
+    const browser = await playwright.chromium.launch({ executablePath, args: CHROME_ARGS });
 
     try {
       const context = await browser.newContext({ locale: 'tr-TR', userAgent: UA });
@@ -505,6 +612,16 @@ export function createHttpDriver() {
     return links.filter((l) => !seen.has(l.href) && seen.add(l.href));
   }
 
+  /** حفظ خريطة الصفحات لتسريع الإقلاع التالي (تُهمَل بلا قرص دائم) */
+  function persistPages() {
+    try {
+      fs.mkdirSync(path.dirname(PAGES_CACHE), { recursive: true });
+      fs.writeFileSync(PAGES_CACHE, JSON.stringify(discovered || {}, null, 2));
+    } catch {
+      /* لا قرص دائم — نكتفي بالذاكرة */
+    }
+  }
+
   function manualPages() {
     const raw = config.eganis.pages;
     if (!raw) return null;
@@ -545,7 +662,21 @@ export function createHttpDriver() {
    * اكتشاف الصفحات بفحص محتواها لا بأسمائها: أسماء القوائم تختلف بين
    * تركيبات eganis، لكن أعمدة الجداول ثابتة.
    */
-  async function autodetect({ limit = 16, onProgress } = {}) {
+  /*
+   * الاكتشاف مهمّة واحدة مهما تعدّد طالبوها. الإقلاع وشاشة الإعدادات قد
+   * يطلبانه معاً، فيفتح كلٌّ متصفّحه ويتضاعف الحمل بلا فائدة.
+   */
+  let scanning = null;
+
+  async function autodetect(options = {}) {
+    if (scanning) return scanning;
+    scanning = runAutodetect(options).finally(() => {
+      scanning = null;
+    });
+    return scanning;
+  }
+
+  async function runAutodetect({ limit = 40, onProgress } = {}) {
     const links = await panelLinks();
     const origin = base();
 
@@ -557,23 +688,66 @@ export function createHttpDriver() {
         if (/^https?:\/\//i.test(link.href) && !link.href.startsWith(origin)) return false;
         return true;
       })
+      // الروابط التي تشبه أسماء صفحات البيانات تُفحص أولاً، فإن طال الجرد
+      // كانت المهمّة قد أُنجزت قبل أن ينفد العدد
+      .sort((a, b) => (classifyLink(b.text, b.href) ? 1 : 0) - (classifyLink(a.text, a.href) ? 1 : 0))
       .slice(0, limit);
 
     const kinds = Object.entries(MAP_KIND);
     const examined = [];
+    const emptyPages = []; // صفحات لم يجد فيها القارئ النصّي جدولاً
 
-    for (const [index, link] of candidates.entries()) {
-      onProgress?.({ index: index + 1, total: candidates.length, text: link.text || link.href });
+    const scoreTables = (link, tables, rendered, dataUrls) => {
+      let any = false;
+      for (const table of tables) {
+        if (!table.rows.length) continue;
+        any = true;
+        const scores = {};
+        for (const [kind, mapKind] of kinds) scores[kind] = mappingScore(table.headers, mapKind);
+        examined.push({ link, rows: table.rows.length, scores, rendered, dataUrls });
+      }
+      return any;
+    };
+
+    let step = 0;
+    const total = candidates.length;
+    for (const link of candidates) {
+      step += 1;
+      onProgress?.({ index: step, total, text: link.text || link.href });
       try {
         const page = await fetchPage(resolve(link.href));
-        for (const table of extractTables(page.html)) {
-          if (!table.rows.length) continue;
-          const scores = {};
-          for (const [kind, mapKind] of kinds) scores[kind] = mappingScore(table.headers, mapKind);
-          examined.push({ link, rows: table.rows.length, scores });
-        }
+        if (!scoreTables(link, extractTables(page.html), false)) emptyPages.push(link);
       } catch (err) {
         log.debug(`eganis(http): تعذّر فحص ${link.href} — ${err.message}`);
+      }
+    }
+
+    /*
+     * الصفحات التي خرجت فارغة قد تكون جداولها مبنيّة بجافاسكربت. نعرضها في
+     * متصفّح واحد يُفتح مرّة ويُغلق — لا صفحة صفحة، ولا متصفّح مقيم.
+     */
+    if (emptyPages.length && config.eganis.loginViaBrowser !== 'never') {
+      log.info(`eganis(http): ${emptyPages.length} صفحة بلا جدول نصّي — أعرضها في المتصفّح`);
+      try {
+        await withBrowser(async (page) => {
+          for (const link of emptyPages.slice(0, 20)) {
+            step += 1;
+            onProgress?.({ index: Math.min(step, total), total, text: `${link.text || link.href} (عرض)` });
+            try {
+              const { html, dataUrls } = await renderHtml(page, resolve(link.href));
+              if (scoreTables(link, extractTables(html), true, dataUrls)) {
+                log.info(
+                  `eganis(http): «${link.text || link.href}» تُبنى بجافاسكربت` +
+                    `${dataUrls.length ? ` — مصدر بياناتها ${short(dataUrls[0])}` : ''}`,
+                );
+              }
+            } catch (err) {
+              log.debug(`eganis(http): تعذّر عرض ${link.href} — ${err.message}`);
+            }
+          }
+        });
+      } catch (err) {
+        log.warn(`eganis(http): تعذّر فتح المتصفّح للعرض — ${err.message}`);
       }
     }
 
@@ -610,6 +784,10 @@ export function createHttpDriver() {
         text: pick.link.text,
         score: Number((pick.scores[kind]?.score || 0).toFixed(2)),
         rows: pick.rows,
+        // نتذكّر أن هذه الصفحة تحتاج عرضاً، فلا نقرأها نصّاً ونظنّها فارغة
+        rendered: pick.rendered || undefined,
+        // وعنوان بياناتها إن كشفه العرض — به تصير القراءة بلا متصفّح
+        dataUrls: pick.dataUrls?.length ? pick.dataUrls : undefined,
       };
     }
 
@@ -622,14 +800,8 @@ export function createHttpDriver() {
       }
     }
 
-    try {
-      fs.mkdirSync(path.dirname(PAGES_CACHE), { recursive: true });
-      fs.writeFileSync(PAGES_CACHE, JSON.stringify(found, null, 2));
-    } catch {
-      /* لا قرص دائم — نكتفي بالذاكرة */
-    }
-
     discovered = found;
+    persistPages();
     return { found, scanned: candidates.length };
   }
 
@@ -647,13 +819,49 @@ export function createHttpDriver() {
       );
     }
 
-    const page = await fetchPage(resolve(target.href));
-    const tables = extractTables(page.html).filter((t) => t.rows.length);
+    const url = resolve(target.href);
+    let tables = [];
+
+    /*
+     * أوّلاً: مصدر البيانات إن عرفناه — أسرع طريق وأخفّه، ويجعل التغيير في
+     * eganis يظهر هنا خلال أجزاء من الثانية.
+     */
+    if (target.dataUrls?.length) {
+      if (!loggedIn) await login();
+      for (const dataUrl of target.dataUrls) {
+        try {
+          tables = [await tableFromDataUrl(dataUrl)];
+          break;
+        } catch (err) {
+          log.debug(`eganis(http): مصدر بيانات "${kind}" تعذّر — ${err.message}`);
+        }
+      }
+      // تغيّر المصدر أو انتهى: ننسى العنوان ونكتشفه من جديد بالعرض
+      if (!tables.length) {
+        target.dataUrls = undefined;
+        persistPages();
+      }
+    }
+
+    // صفحة عُرف أنها تُبنى بجافاسكربت: نتخطّى المحاولة النصّية العقيمة
+    if (!tables.length && !target.rendered) {
+      const page = await fetchPage(url);
+      tables = extractTables(page.html).filter((t) => t.rows.length);
+    }
+
+    if (!tables.length && config.eganis.loginViaBrowser !== 'never') {
+      if (!loggedIn) await login();
+      const { html, dataUrls } = await withBrowser((page) => renderHtml(page, url));
+      tables = extractTables(html).filter((t) => t.rows.length);
+      if (tables.length) {
+        target.rendered = true;
+        if (dataUrls.length) target.dataUrls = dataUrls; // القراءة القادمة بلا متصفّح
+        persistPages();
+      }
+    }
+
     if (!tables.length) {
-      throw new HttpError(
-        502,
-        `صفحة "${kind}" بلا جدول قابل للقراءة — قد تُبنى بجافاسكربت (${short(page.url)})`,
-      );
+      throw new HttpError(502, `صفحة "${kind}" بلا جدول قابل للقراءة (${short(url)})`);
     }
 
     const mapKind = MAP_KIND[kind];
@@ -868,13 +1076,63 @@ export function createHttpDriver() {
       return rows.find((r) => String(r.phone || '').replace(/\D/g, '').endsWith(digits)) || null;
     },
 
+    /**
+     * حركات حساب عميل من صفحة «Cari Hesap».
+     *
+     * الدفتر لا يحمل رقم العميل عادةً، بل رقم العقد في خانة «Belge No».
+     * فالبحث عن رقم العميل فيه لا يجد شيئاً ويظهر الحساب صفراً وهو ليس كذلك.
+     * لذا نصل بينهما عبر عقوده: نجمع أرقام عقود هذا العميل ثم نأخذ كل حركة
+     * تشير إلى واحد منها — إضافةً إلى ما يذكر اسمه أو هاتفه صراحةً.
+     */
     async listLedgerEntries(customerId) {
       const rows = await readPage('ledger').catch(() => []);
       if (!rows.length) return [];
-      const needle = String(customerId || '').toLowerCase();
+
+      const asType = (r) => ({ ...r, type: r.direction === 'credit' ? 'payment' : 'extra' });
+      const needle = String(customerId || '').trim().toLowerCase();
+      if (!needle) return rows.map(asType);
+
+      const digits = (v) => String(v ?? '').replace(/\D/g, '');
+      const needleDigits = digits(needle);
+
+      const customers = await this.searchCustomers('').catch(() => []);
+      const customer = customers.find((c) => {
+        if (String(c.id ?? '').toLowerCase() === needle) return true;
+        if (String(c.name ?? '').toLowerCase() === needle) return true;
+        const phone = digits(c.phone);
+        return phone && needleDigits.length >= 6 && phone.endsWith(needleDigits.slice(-9));
+      });
+
+      const isHis = (c) => {
+        if (customer) {
+          if (c.customerId && String(c.customerId).toLowerCase() === String(customer.id).toLowerCase()) return true;
+          if (c.customerName && customer.name && c.customerName.trim() === customer.name.trim()) return true;
+          const a = digits(c.phone);
+          const b = digits(customer.phone);
+          if (a && b && a.slice(-9) === b.slice(-9)) return true;
+          return false;
+        }
+        return JSON.stringify(c).toLowerCase().includes(needle);
+      };
+
+      const contracts = await readPage('contracts').catch(() => []);
+      const refs = new Set(
+        contracts.filter(isHis).map((c) => String(c.no ?? '').trim().toLowerCase()).filter(Boolean),
+      );
+
+      const keys = [needle, customer?.id, customer?.name, customer?.phone]
+        .filter(Boolean)
+        .map((k) => String(k).toLowerCase().trim())
+        .filter((k) => k.length >= 3);
+
       return rows
-        .filter((r) => !needle || JSON.stringify(r).toLowerCase().includes(needle))
-        .map((r) => ({ ...r, type: r.direction === 'credit' ? 'payment' : 'extra' }));
+        .filter((r) => {
+          const ref = String(r.ref ?? '').trim().toLowerCase();
+          if (ref && refs.has(ref)) return true;
+          const hay = JSON.stringify(r).toLowerCase();
+          return keys.some((k) => hay.includes(k));
+        })
+        .map(asType);
     },
 
     extendContract: () => notSupported('تمديد عقد'),

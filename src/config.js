@@ -75,8 +75,11 @@ export const config = {
     // جلسة متصفّح محفوظة بتسجيل دخول يدوي (وضع browser)
     sessionFile: process.env.EGANIS_SESSION_FILE || './data/eganis-session.json',
     timeoutMs: Number(process.env.EGANIS_TIMEOUT_MS || 20000),
-    // وضع المتصفّح: مدة الاحتفاظ بنتيجة الصفحة قبل إعادة قراءتها من eganis
-    cacheSeconds: Number(process.env.EGANIS_CACHE_SECONDS || 20),
+    // مدة الاحتفاظ بنتيجة الصفحة قبل إعادة قراءتها من eganis.
+    // القراءة صارت طلب JSON واحداً (أجزاء من الثانية)، فيمكن تقصيرها كثيراً
+    // ليظهر تعديلك في eganis هنا بسرعة — وهي في الوقت ذاته سقف الحمل على
+    // لوحتك: ست قراءات في الدقيقة لكل نوع مهما كثر من يفتح التطبيق.
+    cacheSeconds: Number(process.env.EGANIS_CACHE_SECONDS || 10),
     // مهلة انتظار الجداول التي تُحمَّل بجافاسكربت
     pageWaitMs: Number(process.env.EGANIS_PAGE_WAIT_MS || 3000),
     // إغلاق المتصفّح بعد خمول بهذه الدقائق (0 = أبقِه مفتوحاً)

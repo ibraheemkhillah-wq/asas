@@ -1528,7 +1528,9 @@ async function render() {
  * أو رسالة نصف مكتوبة.
  */
 const LIVE_VIEWS = ['today', 'contracts', 'fleet'];
-const LIVE_EVERY_MS = 30000;
+// السحب رخيص لأنه يصيب ذاكرة الخادم المؤقتة لا لوحة eganis، فحمل اللوحة
+// يحدّه EGANIS_CACHE_SECONDS لا هذه الدورة
+const LIVE_EVERY_MS = 10000;
 
 setInterval(async () => {
   if (!LIVE_VIEWS.includes(state.view)) return;
