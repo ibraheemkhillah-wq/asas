@@ -22,7 +22,7 @@ import { config } from '../../config.js';
 import { HttpError } from '../../lib/http.js';
 import { log } from '../../lib/log.js';
 import { findChrome } from '../../lib/chrome.js';
-import { classifyLink, mapRows, mappingScore } from './auto-map.js';
+import { classifyLink, mapRows, mappingScore, normalizeHeader } from './auto-map.js';
 
 let playwrightModule = null;
 
@@ -315,6 +315,12 @@ export function createBrowserDriver() {
     });
   }
 
+  /** روابط لا تحوي بيانات تشغيل — نوفّر وقت فحصها */
+  const SKIP_WORDS = [
+    'cikis', 'logout', 'ayarlar', 'profil', 'hesabim', 'yardim', 'destek',
+    'sifre', 'password', 'kullanici', 'yetki', 'log', 'bildirim', 'hakkinda',
+  ];
+
   const MAP_KIND = {
     contracts: 'contract',
     vehicles: 'vehicle',
@@ -423,6 +429,116 @@ export function createBrowserDriver() {
       } catch (err) {
         return { ok: false, driver: 'browser', error: err.message };
       }
+    },
+
+    /**
+     * اكتشاف الصفحات بفحص محتواها لا بأسمائها.
+     *
+     * أسماء القوائم تختلف بين تركيبات eganis، لكن **أعمدة الجداول ثابتة**:
+     * صفحة فيها «Sözleşme No · Müşteri · Plaka» هي العقود مهما سُمّيت.
+     * فنزور الصفحات واحدة واحدة ونحكم على كل واحدة من ترويسة جدولها.
+     */
+    async autodetect({ limit = 16, onProgress } = {}) {
+      const links = await panelLinks();
+      const base = config.eganis.baseUrl;
+
+      const candidates = links
+        .filter((link) => {
+          const hay = normalizeHeader(`${link.text} ${link.href}`);
+          if (!hay) return false;
+          if (SKIP_WORDS.some((word) => hay.includes(word))) return false;
+          if (/^https?:\/\//i.test(link.href) && !link.href.startsWith(base)) return false;
+          return true;
+        })
+        .slice(0, limit);
+
+      const { context: ctx } = await session();
+      const kinds = Object.entries(MAP_KIND);
+      const examined = []; // كل جدول وجدناه ودرجات مطابقته لكل نوع
+
+      for (const [index, link] of candidates.entries()) {
+        onProgress?.({ index: index + 1, total: candidates.length, text: link.text || link.href });
+
+        const url = link.href.startsWith('http')
+          ? link.href
+          : `${base}${link.href.startsWith('/') ? '' : '/'}${link.href}`;
+        const page = await ctx.newPage();
+        try {
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await page.waitForTimeout(config.eganis.pageWaitMs);
+
+          for (const table of await readTables(page)) {
+            if (!table.rows.length) continue;
+            const scores = {};
+            for (const [kind, mapKind] of kinds) scores[kind] = mappingScore(table.headers, mapKind);
+            examined.push({ link, rows: table.rows.length, scores });
+          }
+        } catch (err) {
+          log.debug(`eganis(browser): تعذّر فحص ${url} — ${err.message}`);
+        } finally {
+          await page.close();
+        }
+      }
+
+      /**
+       * كل صفحة شيء واحد لا عدّة أشياء.
+       *
+       * جدول العقود يحوي «Plaka» و«Müşteri»، فلو حكمنا على كل نوع وحده لظنناه
+       * صفحة مركبات وصفحة عملاء أيضاً. لذا نسأل أولاً: هذا الجدول أقرب ما يكون
+       * إلى ماذا؟ (أعلى درجة، ثم أكثر الحقول تطابقاً)، ثم نوزّع الأنواع عليها.
+       */
+      const primaryOf = (entry) =>
+        kinds
+          .map(([kind]) => ({ kind, ...entry.scores[kind] }))
+          .sort((a, b) => b.score - a.score || b.matched - a.matched)[0];
+
+      const found = {};
+      const claimed = new Set();
+
+      for (const [kind] of kinds) {
+        const best = examined
+          .filter((e) => !claimed.has(e) && primaryOf(e).kind === kind && e.scores[kind].score >= 0.6)
+          .sort((a, b) => b.scores[kind].score - a.scores[kind].score || b.rows - a.rows)[0];
+        if (best) {
+          claimed.add(best);
+          found[kind] = {
+            href: best.link.href,
+            text: best.link.text,
+            score: best.scores[kind].score,
+            rows: best.rows,
+          };
+        }
+      }
+
+      // نوع لم تُخصَّص له صفحة: نقبل أفضل مطابقة ثانوية من صفحة غير مأخوذة
+      for (const [kind] of kinds) {
+        if (found[kind]) continue;
+        const best = examined
+          .filter((e) => !claimed.has(e) && e.scores[kind].score >= 0.6)
+          .sort((a, b) => b.scores[kind].score - a.scores[kind].score || b.rows - a.rows)[0];
+        if (best) {
+          claimed.add(best);
+          found[kind] = {
+            href: best.link.href,
+            text: best.link.text,
+            score: best.scores[kind].score,
+            rows: best.rows,
+            secondary: true,
+          };
+        }
+      }
+
+      scheduleIdleClose();
+      if (Object.keys(found).length) {
+        discovered = found;
+        try {
+          fs.mkdirSync(path.dirname(PAGES_CACHE), { recursive: true });
+          fs.writeFileSync(PAGES_CACHE, JSON.stringify(found, null, 2), 'utf8');
+        } catch {
+          /* بلا قرص دائم */
+        }
+      }
+      return { found, scanned: candidates.length };
     },
 
     /** كل روابط اللوحة مع تخمين نوع كل واحد — لاختيار الصفحات يدوياً */

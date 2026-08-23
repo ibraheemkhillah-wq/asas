@@ -1142,10 +1142,13 @@ async function viewSettings() {
     <div class="card" style="margin-top:14px" id="pages-card">
       <h2>صفحات لوحتك</h2>
       <p class="muted">
-        إن لم يتعرّف التطبيق على صفحاتك تلقائياً، حدّدها بنفسك: اضغط «اقرأ قائمة لوحتي»
-        ثم اختر لكل نوع الصفحة المقابلة له عندك.
+        الاكتشاف التلقائي يفتح صفحات لوحتك ويتعرّف على كل واحدة من أعمدة جدولها
+        (لا من اسمها)، ويحفظ النتيجة. يستغرق دقيقة أو اثنتين مرة واحدة فقط.
       </p>
-      <div class="row"><button class="btn ghost" id="pages-load">اقرأ قائمة لوحتي</button></div>
+      <div class="row">
+        <button class="btn" id="pages-auto">اكتشف صفحاتي تلقائياً</button>
+        <button class="btn ghost" id="pages-load">أو اخترها بنفسي</button>
+      </div>
       <div id="pages-box" style="margin-top:12px"></div>
     </div>
 
@@ -1225,11 +1228,11 @@ async function viewSettings() {
         ${
           missing.length
             ? `<div class="alert medium" style="margin-top:10px">
-                 لم أتعرّف على صفحات لوحتك من أسمائها — حدّدها بنفسك من «صفحات لوحتك» أدناه.
+                 لم أتعرّف على صفحات لوحتك من أسمائها — اضغط «اكتشف صفحاتي تلقائياً» أدناه.
                </div>`
             : '<p class="muted">افتح «لوحة اليوم» لترى بياناتك.</p>'
         }`;
-      if (missing.length) loadLinks();
+      // لا نفتح شيئاً تلقائياً: الاكتشاف التلقائي بضغطة واحدة أدناه
       toast(missing.length ? 'الدخول نجح — بقي تحديد الصفحات' : 'تم ربط eganis بنجاح');
     } catch (err) {
       box.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
@@ -1301,6 +1304,69 @@ async function viewSettings() {
     }
   }
 
+  async function autodetect() {
+    const pagesBox = document.getElementById('pages-box');
+    const btn = document.getElementById('pages-auto');
+    btn.disabled = true;
+    pagesBox.innerHTML = '<div class="empty">جارِ فتح لوحتك…</div>';
+
+    const KIND_LABEL = {
+      contracts: 'العقود',
+      vehicles: 'المركبات',
+      bookings: 'الحجوزات',
+      customers: 'العملاء',
+      ledger: 'حسابات العملاء',
+    };
+
+    try {
+      await api('/api/eganis/autodetect', { method: 'POST' });
+
+      // نتابع التقدّم حتى ينتهي الفحص
+      for (let tick = 0; tick < 200; tick += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const state = await api('/api/eganis/autodetect');
+
+        if (state.running) {
+          const p = state.progress || {};
+          pagesBox.innerHTML = `<div class="empty">جارِ فحص صفحات لوحتك…<br>
+            ${p.total ? `${p.index} من ${p.total}` : ''} ${esc(p.text || '')}</div>`;
+          continue;
+        }
+
+        if (state.error) {
+          pagesBox.innerHTML = `<div class="alert high">${esc(state.error)}</div>`;
+          break;
+        }
+
+        if (state.result) {
+          const found = state.result.found || {};
+          const rows = Object.entries(found);
+          pagesBox.innerHTML = rows.length
+            ? `<div class="alert" style="background:rgba(23,121,74,.14);color:var(--ok)">
+                 وجدت ${rows.length} صفحة من أصل ${state.result.scanned} صفحة فحصتها
+               </div>
+               <div class="kv-list">
+                 ${rows
+                   .map(
+                     ([kind, v]) =>
+                       `<div><span class="muted">${esc(KIND_LABEL[kind] || kind)}:</span>
+                        ${esc(v.text || v.href)} <span class="muted">(${v.rows} صف)</span></div>`,
+                   )
+                   .join('')}
+               </div>`
+            : `<div class="alert medium">لم أتعرّف على أي صفحة — اضغط «أو اخترها بنفسي».</div>`;
+          if (rows.length) await saveAndTest();
+          break;
+        }
+      }
+    } catch (err) {
+      pagesBox.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('pages-auto').onclick = autodetect;
   document.getElementById('pages-load').onclick = loadLinks;
   document.getElementById('set-save').onclick = saveAndTest;
 

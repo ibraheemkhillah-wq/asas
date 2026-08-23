@@ -79,6 +79,43 @@ export function registerSystemRoutes(router) {
     return null;
   });
 
+  /**
+   * اكتشاف الصفحات بفحص محتواها. يستغرق دقيقة أو أكثر لأنه يزور صفحات
+   * اللوحة واحدة واحدة، فيعمل في الخلفية والواجهة تسأل عن تقدّمه.
+   */
+  let scan = { running: false, progress: null, result: null, error: null, at: null };
+
+  router.post('/api/eganis/autodetect', async () => {
+    if (scan.running) return { running: true, progress: scan.progress };
+
+    const driver = eganis();
+    if (typeof driver.autodetect !== 'function') {
+      throw new HttpError(501, `الاكتشاف التلقائي متاح في وضع المتصفّح فقط (الحالي: ${driver.name})`);
+    }
+
+    scan = { running: true, progress: { index: 0, total: 0, text: 'جارِ فتح اللوحة…' }, result: null, error: null, at: Date.now() };
+
+    // لا ننتظره: الطلب يعود فوراً والواجهة تتابع التقدّم
+    driver
+      .autodetect({ onProgress: (p) => { scan.progress = p; } })
+      .then(({ found, scanned }) => {
+        // نحفظ ما وُجد كإعداد ثابت حتى لا نعيد الفحص بعد كل تشغيل
+        const map = Object.fromEntries(Object.entries(found).map(([kind, v]) => [kind, v.href]));
+        if (Object.keys(map).length) {
+          settings.saveSettings({ eganisPages: JSON.stringify(map) }, 'autodetect');
+        }
+        scan = { running: false, progress: null, result: { found, scanned }, error: null, at: Date.now() };
+      })
+      .catch((err) => {
+        scan = { running: false, progress: null, result: null, error: err.message, at: Date.now() };
+      });
+
+    return { running: true, started: true };
+  });
+
+  /** متابعة تقدّم الاكتشاف */
+  router.get('/api/eganis/autodetect', () => scan);
+
   /** كل روابط لوحة eganis مع تخمين نوع كل صفحة — لاختيارها يدوياً */
   router.get('/api/eganis/links', async () => {
     const driver = eganis();
