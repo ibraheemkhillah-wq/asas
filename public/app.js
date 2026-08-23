@@ -1133,6 +1133,7 @@ async function viewSettings() {
 
       <div class="row">
         <button class="btn" id="set-save">حفظ واختبار الربط</button>
+        <button class="btn ghost" id="set-diag">لماذا فشل الدخول؟</button>
         <button class="btn ghost" id="set-shot">اعرض ما يراه الخادم</button>
       </div>
 
@@ -1199,7 +1200,7 @@ async function viewSettings() {
       const result = await api('/api/settings/test', { method: 'POST' });
       if (!result.ok) {
         box.innerHTML = `<div class="alert high">تعذّر الاتصال: ${esc(result.error || 'سبب غير معروف')}</div>
-          <p class="muted">اضغط «اعرض ما يراه الخادم» لتشخيص السبب بالصورة.</p>`;
+          <p class="muted">اضغط «لماذا فشل الدخول؟» ليقرأ الخادم نموذج لوحتك ويقول ما ينقصه.</p>`;
         return;
       }
 
@@ -1369,6 +1370,64 @@ async function viewSettings() {
   document.getElementById('pages-auto').onclick = autodetect;
   document.getElementById('pages-load').onclick = loadLinks;
   document.getElementById('set-save').onclick = saveAndTest;
+
+  /*
+   * تشخيص الدخول داخل التطبيق لا عبر فتح رابط: الواجهة تحمل رمز الدخول،
+   * وصاحب الشركة يعمل من جواله فلا يُطلب منه نسخ سجلّات الاستضافة.
+   */
+  document.getElementById('set-diag').onclick = async (event) => {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    box.innerHTML = '<p class="muted">أفحص نموذج الدخول في لوحتك…</p>';
+    try {
+      const d = await api('/api/eganis/login-check');
+      if (d.ok) {
+        box.innerHTML = `<div class="alert" style="background:rgba(23,121,74,.14);color:var(--ok)">
+          الدخول ناجح ✔ ${esc(d.title || '')}</div>`;
+        return;
+      }
+
+      const line = (label, value) =>
+        `<tr><td class="muted" style="padding:4px 10px 4px 0;white-space:nowrap">${label}</td>
+             <td style="padding:4px 0"><code>${esc(String(value ?? '—'))}</code></td></tr>`;
+
+      const report = [
+        `السبب: ${d.error || '—'}`,
+        `الرابط: ${d.url || '—'}`,
+        `المستخدم: ${d.user || '—'} (${d.userShape || '—'})`,
+        `كلمة السر: ${d.passwordLength ?? 0} حرفاً (${d.passwordShape || '—'})`,
+        `عنوان الصفحة: ${d.title || '—'}`,
+        d.summary || '',
+      ].join('\n');
+
+      box.innerHTML = `
+        <div class="alert high">${esc(d.error || 'فشل الدخول')}</div>
+        <table style="width:100%;font-size:13px;margin-top:8px">
+          ${line('الرابط', d.url)}
+          ${line('المستخدم', `${d.user} — ${d.userShape}`)}
+          ${line('كلمة السر', `${d.passwordLength} حرفاً — ${d.passwordShape}`)}
+          ${line('عنوان الصفحة', d.title)}
+        </table>
+        <p class="muted" style="margin-top:10px">ما يطلبه نموذج لوحتك فعلاً:</p>
+        <pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;
+             background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px"
+          >${esc(d.summary || '—')}</pre>
+        <button class="btn ghost" id="diag-copy">انسخ التقرير</button>`;
+
+      document.getElementById('diag-copy').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(report);
+          toast('تم نسخ التقرير');
+        } catch {
+          toast('تعذّر النسخ — حدّد النص يدوياً', true);
+        }
+      };
+    } catch (err) {
+      box.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  };
 
   document.getElementById('set-shot').onclick = () => {
     const url = `/api/eganis/screenshot?token=${encodeURIComponent(state.token)}&t=${Date.now()}`;

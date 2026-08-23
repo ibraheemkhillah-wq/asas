@@ -477,6 +477,14 @@ export function createBrowserDriver() {
           fs.rmSync(sessionFile, { force: true });
           log.warn('eganis(browser): حُذفت الجلسة المحفوظة بعد فشل الدخول');
         }
+        /*
+         * والأهمّ: إسقاط السياق المفتوح. لو تُرك، لوجده الطلب التالي مخزَّناً
+         * فعاد منه فوراً بلا فحص دخول — فيقول التطبيق «متصل» وهو خارج اللوحة،
+         * ثم تفشل القراءة بعدها برسالة لا تدلّ على السبب.
+         */
+        await page.close().catch(() => {});
+        await context?.close().catch(() => {});
+        context = null;
         throw err;
       }
       // احفظ الجلسة الجديدة لإعادة استخدامها بعد إعادة التشغيل
