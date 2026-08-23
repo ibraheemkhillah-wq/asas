@@ -201,6 +201,8 @@ export function createHttpDriver() {
    * أنها ستفشل.
    */
   let preferBrowserLogin = false;
+  // آخر لقطة التُقطت أثناء فشل دخول بالمتصفّح — تُعرض في شاشة الإعدادات
+  let lastLoginShot = null;
 
   const cooldownMs = () => Math.min(5, failures) * 60000;
 
@@ -401,6 +403,12 @@ export function createHttpDriver() {
       await page.locator(userSel).first().fill(username);
       await page.locator(passSel).first().fill(password);
 
+      // نقرأ ما استقرّ في الخانتين قبل الإرسال — بعده تُفرَّغ مع إعادة التحميل
+      const typed = {
+        user: await page.locator(userSel).first().inputValue().catch(() => ''),
+        passwordLength: (await page.locator(passSel).first().inputValue().catch(() => '')).length,
+      };
+
       await Promise.all([
         page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {}),
         page
@@ -413,6 +421,19 @@ export function createHttpDriver() {
 
       const stillLogin = await page.locator('input[type="password"]').filter({ visible: true }).count();
       if (stillLogin > 0) {
+        /*
+         * لقطة من داخل المحاولة نفسها — لا محاولة إضافية.
+         * حين يُرفض متصفّح حقيقي بنفس البيانات، لم يبقَ ما يُشرح بالكلام:
+         * يرى صاحب الحساب بعينه ما كُتب في الخانة وما ردّت به اللوحة.
+         */
+        lastLoginShot = {
+          at: Date.now(),
+          url: page.url(),
+          typedUser: typed.user,
+          typedPasswordLength: typed.passwordLength,
+          image: await page.screenshot({ fullPage: true, type: 'png' }).catch(() => null),
+        };
+
         const message = await page
           .evaluate(() => {
             const nodes = document.querySelectorAll(
@@ -737,6 +758,13 @@ export function createHttpDriver() {
           title,
           form,
           summary: formSummary(form),
+          // ما كُتب فعلاً في الخانتين داخل المتصفّح — يقطع الشكّ بأن التطبيق
+          // يرسل شيئاً غير الذي حُفظ
+          typed: lastLoginShot && {
+            user: lastLoginShot.typedUser,
+            passwordLength: lastLoginShot.typedPasswordLength,
+          },
+          shot: Boolean(lastLoginShot?.image),
           scripts: scripts && {
             جافاسكربت_يمسّ_كلمة_السر: scripts.touchesPassword,
             معالج_إرسال: scripts.submitHandler,
@@ -747,6 +775,25 @@ export function createHttpDriver() {
           tookMs: Date.now() - started,
         };
       }
+    },
+
+    /**
+     * ما رآه الخادم لحظة رفض اللوحة — لقطة من داخل المحاولة الأخيرة نفسها،
+     * فعرضها لا يكلّف محاولة دخول جديدة ولا يقرّب الحساب من القفل.
+     */
+    async screenshot() {
+      if (!lastLoginShot?.image) {
+        throw new HttpError(
+          501,
+          'لا توجد لقطة بعد. اضغط «لماذا فشل الدخول؟» أولاً، فتُلتقط أثناء المحاولة.',
+        );
+      }
+      return {
+        url: lastLoginShot.url,
+        title: 'آخر محاولة دخول',
+        loggedIn: false,
+        image: lastLoginShot.image,
+      };
     },
 
     async links() {

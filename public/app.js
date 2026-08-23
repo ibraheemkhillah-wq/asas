@@ -1413,9 +1413,20 @@ async function viewSettings() {
            <button class="btn" id="diag-fix">نعم — استخدمها واختبر الربط</button>`
         : '';
 
+      // متصفّح حقيقي كتب وضغط ورُفض: لم يبقَ ما يُشرح، يُرى بالعين
+      const shotCard = d.shot
+        ? `<p class="muted" style="margin-top:10px">
+             ما رآه الخادم لحظة الرفض${d.typed ? ` — كُتب في خانة المستخدم: <code>${esc(d.typed.user)}</code>،
+             وفي كلمة السر ${d.typed.passwordLength} حرفاً` : ''}:</p>
+           <img src="/api/eganis/screenshot?token=${encodeURIComponent(state.token)}&t=${Date.now()}"
+                alt="لقطة لحظة الرفض"
+                style="width:100%;border:1px solid var(--border);border-radius:10px" />`
+        : '';
+
       box.innerHTML = `
         <div class="alert high">${esc(d.error || 'فشل الدخول')}</div>
         ${fixCard}
+        ${shotCard}
         <table style="width:100%;font-size:13px;margin-top:8px">
           ${line('الرابط', d.url)}
           ${line('المستخدم', `${d.user} — ${d.userShape}`)}
