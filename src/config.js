@@ -55,6 +55,8 @@ export const config = {
     pageWaitMs: Number(process.env.EGANIS_PAGE_WAIT_MS || 3000),
     // إغلاق المتصفّح بعد خمول بهذه الدقائق (0 = أبقِه مفتوحاً)
     idleCloseMinutes: Number(process.env.EGANIS_IDLE_CLOSE_MINUTES || 10),
+    // صفحات اختارها المستخدم من شاشة الإعدادات: {"contracts":"/x","vehicles":"/y"}
+    pages: process.env.EGANIS_PAGES || '',
   },
 
   whatsapp: {

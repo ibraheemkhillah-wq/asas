@@ -201,9 +201,63 @@ export function createBrowserDriver() {
     return { context, spec };
   }
 
+  /** قراءة كل روابط اللوحة — أساس الاكتشاف التلقائي والاختيار اليدوي */
+  async function panelLinks() {
+    const { context: ctx } = await session();
+    const page = await ctx.newPage();
+    try {
+      await page.goto(config.eganis.baseUrl, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(config.eganis.pageWaitMs);
+
+      // كثير من اللوحات تُخفي القوائم خلف أزرار — نفتحها قبل القراءة
+      for (const selector of ['.dropdown-toggle', '[data-toggle="collapse"]', '.nav-link.has-arrow']) {
+        const toggles = await page.locator(selector).all().catch(() => []);
+        for (const toggle of toggles.slice(0, 20)) {
+          await toggle.click({ timeout: 1200 }).catch(() => {});
+        }
+      }
+      await page.waitForTimeout(600);
+
+      const links = await page.$$eval('a[href]', (nodes) =>
+        nodes
+          .map((a) => ({
+            text: (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+            href: a.getAttribute('href'),
+          }))
+          .filter((l) => l.href && !l.href.startsWith('javascript') && l.href !== '#'),
+      );
+      const seen = new Set();
+      return links.filter((l) => !seen.has(l.href) && seen.add(l.href));
+    } finally {
+      await page.close();
+      scheduleIdleClose();
+    }
+  }
+
+  /** الصفحات التي اختارها المستخدم بنفسه من شاشة الإعدادات */
+  function manualPages() {
+    const raw = config.eganis.pages;
+    if (!raw) return null;
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const entries = Object.entries(parsed).filter(([, href]) => href);
+      if (!entries.length) return null;
+      return Object.fromEntries(entries.map(([kind, href]) => [kind, { href, manual: true }]));
+    } catch {
+      return null;
+    }
+  }
+
   /** اكتشاف صفحات اللوحة مرة واحدة، مع تخزينها لتسريع الإقلاع لاحقاً */
   async function discoverPages() {
     if (discovered) return discovered;
+
+    // اختيار المستخدم أولاً — هو الأدرى بلوحته
+    const chosen = manualPages();
+    if (chosen) {
+      discovered = chosen;
+      return discovered;
+    }
 
     const spec = profile();
     if (spec.pages && Object.keys(spec.pages).length) {
@@ -222,34 +276,22 @@ export function createBrowserDriver() {
       }
     }
 
-    const { context: ctx } = await session();
-    const page = await ctx.newPage();
+    const links = await panelLinks();
+    const found = {};
+    for (const link of links) {
+      const kind = classifyLink(link);
+      if (kind && !found[kind]) found[kind] = { href: link.href, text: link.text };
+    }
+    discovered = found;
+
     try {
-      await page.goto(config.eganis.baseUrl, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(2500);
-      const links = await page.$$eval('a[href]', (nodes) =>
-        nodes
-          .map((a) => ({
-            text: (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
-            href: a.getAttribute('href'),
-          }))
-          .filter((l) => l.href && !l.href.startsWith('javascript') && !l.href.startsWith('#')),
-      );
-
-      const found = {};
-      for (const link of links) {
-        const kind = classifyLink(link);
-        if (kind && !found[kind]) found[kind] = { href: link.href, text: link.text };
-      }
-      discovered = found;
-
       fs.mkdirSync(path.dirname(PAGES_CACHE), { recursive: true });
       fs.writeFileSync(PAGES_CACHE, JSON.stringify(found, null, 2), 'utf8');
-      log.info(`eganis(browser): اكتُشفت الصفحات — ${Object.keys(found).join(', ') || 'لا شيء'}`);
-      return discovered;
-    } finally {
-      await page.close();
+    } catch {
+      /* بلا قرص دائم — نكتفي بالذاكرة */
     }
+    log.info(`eganis(browser): اكتُشفت الصفحات — ${Object.keys(found).join(', ') || 'لا شيء'}`);
+    return discovered;
   }
 
   /** كل جداول الصفحة كنصوص (ترويسة + صفوف) */
@@ -294,7 +336,7 @@ export function createBrowserDriver() {
     if (!target) {
       throw new HttpError(
         501,
-        `لم أعثر على صفحة "${kind}" في لوحتك. عرّفها يدوياً في config/eganis.json تحت browser.pages`,
+        `لم أعثر على صفحة "${kind}" في لوحتك — اختَرها يدوياً من شاشة الإعدادات`,
       );
     }
 
@@ -381,6 +423,12 @@ export function createBrowserDriver() {
       } catch (err) {
         return { ok: false, driver: 'browser', error: err.message };
       }
+    },
+
+    /** كل روابط اللوحة مع تخمين نوع كل واحد — لاختيار الصفحات يدوياً */
+    async links() {
+      const found = await panelLinks();
+      return found.map((link) => ({ ...link, guess: classifyLink(link) }));
     },
 
     /**

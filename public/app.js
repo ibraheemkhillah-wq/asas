@@ -1139,6 +1139,16 @@ async function viewSettings() {
       <div id="set-result" style="margin-top:12px"></div>
     </div>
 
+    <div class="card" style="margin-top:14px" id="pages-card">
+      <h2>صفحات لوحتك</h2>
+      <p class="muted">
+        إن لم يتعرّف التطبيق على صفحاتك تلقائياً، حدّدها بنفسك: اضغط «اقرأ قائمة لوحتي»
+        ثم اختر لكل نوع الصفحة المقابلة له عندك.
+      </p>
+      <div class="row"><button class="btn ghost" id="pages-load">اقرأ قائمة لوحتي</button></div>
+      <div id="pages-box" style="margin-top:12px"></div>
+    </div>
+
     <div class="card" style="margin-top:14px">
       <h2>سعر الصرف</h2>
       <div class="field">
@@ -1191,14 +1201,19 @@ async function viewSettings() {
       }
 
       const pages = (result.pages || []).join('، ') || '—';
+      // القراءة قد تفشل لصفحة بعينها فيصلنا كائن خطأ لا رقم
+      const count = (value) =>
+        typeof value === 'number' ? String(value) : value?.error ? `تعذّرت — ${value.error}` : '—';
+      const missing = ['contracts', 'vehicles'].filter((k) => !(result.pages || []).includes(k));
+
       box.innerHTML = `
         <div class="alert" style="background:rgba(23,121,74,.14);color:var(--ok)">
-          تم الاتصال بنجاح ✔
+          تم تسجيل الدخول بنجاح ✔
         </div>
         <div class="kv-list">
           <div><span class="muted">الصفحات المكتشفة:</span> ${esc(pages)}</div>
-          <div><span class="muted">العقود المقروءة:</span> ${esc(String(result.sample?.contracts ?? '—'))}</div>
-          <div><span class="muted">المركبات المقروءة:</span> ${esc(String(result.sample?.vehicles ?? '—'))}</div>
+          <div><span class="muted">العقود المقروءة:</span> ${esc(count(result.sample?.contracts))}</div>
+          <div><span class="muted">المركبات المقروءة:</span> ${esc(count(result.sample?.vehicles))}</div>
         </div>
         ${
           result.sample?.firstContract
@@ -1207,13 +1222,86 @@ async function viewSettings() {
               )} — ${esc(result.sample.firstContract.customerName || '')}</p>`
             : ''
         }
-        <p class="muted">افتح «لوحة اليوم» لترى بياناتك.</p>`;
-      toast('تم ربط eganis بنجاح');
+        ${
+          missing.length
+            ? `<div class="alert medium" style="margin-top:10px">
+                 لم أتعرّف على صفحات لوحتك من أسمائها — حدّدها بنفسك من «صفحات لوحتك» أدناه.
+               </div>`
+            : '<p class="muted">افتح «لوحة اليوم» لترى بياناتك.</p>'
+        }`;
+      if (missing.length) loadLinks();
+      toast(missing.length ? 'الدخول نجح — بقي تحديد الصفحات' : 'تم ربط eganis بنجاح');
     } catch (err) {
       box.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
     }
   }
 
+  const PAGE_KINDS = [
+    ['contracts', 'العقود'],
+    ['vehicles', 'المركبات'],
+    ['bookings', 'الحجوزات'],
+    ['customers', 'العملاء'],
+    ['ledger', 'حسابات العملاء (Cari Hesap)'],
+  ];
+
+  async function loadLinks() {
+    const pagesBox = document.getElementById('pages-box');
+    pagesBox.innerHTML = '<div class="empty">جارِ قراءة قائمة لوحتك…</div>';
+    try {
+      const { links } = await api('/api/eganis/links');
+      if (!links.length) {
+        pagesBox.innerHTML = '<div class="alert medium">لم أجد روابط في اللوحة — أرسل لي لقطة «اعرض ما يراه الخادم».</div>';
+        return;
+      }
+
+      let chosen = {};
+      try {
+        chosen = JSON.parse(f.eganisPages.value || '{}');
+      } catch {
+        chosen = {};
+      }
+
+      const options = (kind) =>
+        [
+          '<option value="">— لا شيء —</option>',
+          ...links.map(
+            (l) =>
+              `<option value="${esc(l.href)}" ${chosen[kind] === l.href ? 'selected' : ''}>${esc(
+                l.text || l.href,
+              )}${l.guess === kind ? ' ✓' : ''}</option>`,
+          ),
+        ].join('');
+
+      pagesBox.innerHTML = `
+        ${PAGE_KINDS.map(
+          ([kind, label]) => `
+          <div class="field">
+            <label>${label}</label>
+            <select data-kind="${kind}">${options(kind)}</select>
+          </div>`,
+        ).join('')}
+        <div class="row"><button class="btn" id="pages-save">حفظ الصفحات واختبار القراءة</button></div>
+        <p class="muted">وجدت ${links.length} رابطاً في لوحتك.</p>`;
+
+      document.getElementById('pages-save').onclick = async () => {
+        const map = {};
+        pagesBox.querySelectorAll('select[data-kind]').forEach((el) => {
+          if (el.value) map[el.dataset.kind] = el.value;
+        });
+        try {
+          await api('/api/settings', { method: 'POST', body: { eganisPages: JSON.stringify(map) } });
+          toast('تم حفظ الصفحات — جارِ الاختبار');
+          await saveAndTest();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+    } catch (err) {
+      pagesBox.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
+    }
+  }
+
+  document.getElementById('pages-load').onclick = loadLinks;
   document.getElementById('set-save').onclick = saveAndTest;
 
   document.getElementById('set-shot').onclick = () => {

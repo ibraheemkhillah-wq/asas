@@ -79,6 +79,15 @@ export function registerSystemRoutes(router) {
     return null;
   });
 
+  /** كل روابط لوحة eganis مع تخمين نوع كل صفحة — لاختيارها يدوياً */
+  router.get('/api/eganis/links', async () => {
+    const driver = eganis();
+    if (typeof driver.links !== 'function') {
+      throw new HttpError(501, `سرد الروابط متاح في وضع المتصفّح فقط (الحالي: ${driver.name})`);
+    }
+    return { links: await driver.links() };
+  });
+
   /** إعادة اكتشاف صفحات eganis من الصفر (بعد تغيير في اللوحة) */
   router.post('/api/eganis/refresh', async () => {
     const driver = eganis();

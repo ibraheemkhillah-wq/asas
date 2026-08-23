@@ -29,6 +29,7 @@ const FIELDS = {
     label: 'كلمة السر',
     secret: true,
   },
+  eganisPages: { path: ['eganis', 'pages'], env: 'EGANIS_PAGES', label: 'صفحات اللوحة' },
   fxSource: { path: ['fx', 'source'], env: 'FX_SOURCE', label: 'مصدر سعر الصرف' },
   fxManualRate: { path: ['fx', 'manualRate'], env: 'FX_USD_TRY', label: 'سعر الصرف اليدوي' },
 };
