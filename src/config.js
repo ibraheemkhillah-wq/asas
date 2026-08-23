@@ -53,6 +53,8 @@ export const config = {
     cacheSeconds: Number(process.env.EGANIS_CACHE_SECONDS || 20),
     // مهلة انتظار الجداول التي تُحمَّل بجافاسكربت
     pageWaitMs: Number(process.env.EGANIS_PAGE_WAIT_MS || 3000),
+    // إغلاق المتصفّح بعد خمول بهذه الدقائق (0 = أبقِه مفتوحاً)
+    idleCloseMinutes: Number(process.env.EGANIS_IDLE_CLOSE_MINUTES || 10),
   },
 
   whatsapp: {

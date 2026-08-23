@@ -61,15 +61,54 @@ export function createBrowserDriver() {
 
   const cacheMs = Math.max(0, config.eganis.cacheSeconds) * 1000;
 
+  /**
+   * خيارات تشغيل موفّرة للذاكرة — الخطط الصغيرة (٥١٢ ميجا) تكفي المتصفّح
+   * بالكاد، فنطفئ كل ما لا نحتاجه: الصور والإضافات والخدمات الخلفية.
+   */
+  const CHROME_ARGS = [
+    '--no-sandbox',
+    '--disable-dev-shm-usage', // بلا ذاكرة مشتركة كبيرة داخل الحاويات
+    '--disable-gpu',
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-features=TranslateUI,BackForwardCache,AcceptCHFrame',
+    '--blink-settings=imagesEnabled=false', // نقرأ جداول لا صوراً
+    '--mute-audio',
+    '--no-first-run',
+    '--js-flags=--max-old-space-size=256',
+  ];
+
   async function launchBrowser() {
     const { chromium } = await loadPlaywright();
     const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH || findChrome() || undefined;
     try {
-      return await chromium.launch({ headless: true, executablePath, args: ['--no-sandbox'] });
+      return await chromium.launch({ headless: true, executablePath, args: CHROME_ARGS });
     } catch (err) {
       if (!executablePath) throw err;
-      return chromium.launch({ headless: true, args: ['--no-sandbox'] });
+      return chromium.launch({ headless: true, args: CHROME_ARGS });
     }
+  }
+
+  /**
+   * إغلاق المتصفّح بعد فترة خمول: على خادم صغير لا يبقى المتصفّح مفتوحاً
+   * طوال اليوم آكلاً الذاكرة. يُعاد فتحه تلقائياً عند أول طلب.
+   */
+  let idleTimer = null;
+  function scheduleIdleClose() {
+    clearTimeout(idleTimer);
+    const minutes = config.eganis.idleCloseMinutes;
+    if (!minutes) return;
+    idleTimer = setTimeout(async () => {
+      if (!browser) return;
+      log.info('eganis(browser): إغلاق المتصفّح لعدم الاستخدام');
+      await context?.close().catch(() => {});
+      await browser?.close().catch(() => {});
+      context = null;
+      browser = null;
+    }, minutes * 60000);
+    idleTimer.unref?.();
   }
 
   /** هل نحن داخل اللوحة أم رجعنا لصفحة الدخول؟ */
@@ -158,6 +197,7 @@ export function createBrowserDriver() {
       }
     }
     await page.close();
+    scheduleIdleClose();
     return { context, spec };
   }
 
@@ -292,6 +332,7 @@ export function createBrowserDriver() {
 
       const rows = mapRows(best.headers, best.rows, mapKind);
       cache.set(kind, { at: Date.now(), rows });
+      scheduleIdleClose();
       log.debug(`eganis(browser): ${kind} — ${rows.length} سجل`);
       return rows;
     } finally {
@@ -478,6 +519,7 @@ export function createBrowserDriver() {
     },
 
     async close() {
+      clearTimeout(idleTimer);
       await context?.close().catch(() => {});
       await browser?.close().catch(() => {});
       context = null;
