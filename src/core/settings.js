@@ -110,7 +110,7 @@ export function saveSettings(input, actor = 'dashboard') {
         throw new HttpError(400, 'رابط اللوحة يجب أن يبدأ بـ https:// أو http://');
       }
     }
-    if (key === 'eganisDriver' && value && !['mock', 'api', 'browser'].includes(value)) {
+    if (key === 'eganisDriver' && value && !['mock', 'api', 'http', 'browser', 'browser-full'].includes(value)) {
       throw new HttpError(400, `وضع ربط غير معروف: ${value}`);
     }
     // حقل سرّي فارغ = «لا تغيّره»، حتى لا تُمحى كلمة السر بحفظ النموذج

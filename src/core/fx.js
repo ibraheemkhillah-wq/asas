@@ -94,13 +94,22 @@ async function fromHarem() {
     if (rate < 1 || rate > 10000) throw new Error(`سعر غير معقول من حرم ألتين: ${rate}`);
     return { rate, source: label };
   } catch (err) {
-    if (!config.fx.haremViaBrowser) throw err;
     /*
      * الطلب المباشر من خادم استضافة يُرفض أحياناً (حماية من الآليات تحجب
-     * عناوين مراكز البيانات). ولأن Chromium مثبّت أصلاً لقراءة لوحة eganis،
-     * نطلب السعر من داخله: بصمة متصفّح حقيقية وكوكيز الموقع نفسه.
+     * عناوين مراكز البيانات). نجرّب أولاً قراءة الصفحة المنشورة نصّاً — بلا
+     * متصفّح ولا ذاكرة تُذكر — وهي تكفي في الغالب.
      */
-    log.debug(`حرم ألتين مباشرةً: ${err.message} — أجرّب عبر المتصفّح`);
+    try {
+      log.debug(`حرم ألتين مباشرةً: ${err.message} — أجرّب قراءة الصفحة`);
+      const rate = await haremFromPage();
+      if (rate >= 1 && rate <= 10000) return { rate, source: label };
+    } catch (pageErr) {
+      log.debug(`صفحة حرم ألتين: ${pageErr.message}`);
+    }
+
+    // المتصفّح آخر الحلول، وهو مطفأ افتراضياً لأنه لا يسع الخطط الصغيرة
+    if (!config.fx.haremViaBrowser) throw err;
+    log.debug('أجرّب حرم ألتين عبر المتصفّح');
     const json = await haremJsonViaBrowser();
     const rate = pickHaremRate(json, field);
     if (rate < 1 || rate > 10000) throw new Error(`سعر غير معقول من حرم ألتين: ${rate}`);
@@ -129,6 +138,45 @@ async function haremJson() {
   );
   if (!res.ok) throw new Error(`حرم ألتين ${res.status}`);
   return res.json();
+}
+
+/**
+ * قراءة السعر من صفحة حرم المنشورة بدل واجهتها البرمجية. الصفحة تُقدَّم
+ * كصفحة عادية فتمرّ حيث يُرفض الطلب البرمجي، ونلتقط منها سعر الدولار
+ * بالبحث عن رقم تركي قرب رمز USDTRY.
+ */
+async function haremFromPage() {
+  const res = await fetchWithTimeout(
+    config.fx.haremPageUrl,
+    {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9',
+      },
+    },
+    12000,
+  );
+  if (!res.ok) throw new Error(`صفحة حرم ألتين ${res.status}`);
+  const html = await res.text();
+
+  // بيانات الصفحة تأتي غالباً كـ JSON مضمَّن — نجرّبه أولاً لأنه الأدقّ
+  const embedded = html.match(/"USDTRY"\s*:\s*\{[^}]*\}/i)?.[0];
+  if (embedded) {
+    const field = config.fx.haremField === 'alis' ? 'alis' : 'satis';
+    const value = embedded.match(new RegExp(`"${field}"\\s*:\\s*"?([\\d.,]+)"?`, 'i'))?.[1];
+    const rate = parseRateNumber(value);
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  }
+
+  // وإلا: أول رقم معقول بعد ذكر USDTRY في نصّ الصفحة
+  const near = html.slice(html.search(/USD\s*\/?\s*TRY|USDTRY/i));
+  for (const match of near.matchAll(/(\d{1,3}[.,]\d{2,4})/g)) {
+    const rate = parseRateNumber(match[1]);
+    if (Number.isFinite(rate) && rate > 5 && rate < 500) return rate;
+  }
+  throw new Error('لم أجد سعر الدولار في صفحة حرم ألتين');
 }
 
 /**

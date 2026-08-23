@@ -81,7 +81,8 @@ applyStoredSettings();
  */
 async function autodetectPagesOnBoot() {
   const { driver, baseUrl, username, password, pages } = config.eganis;
-  if (driver !== 'browser' || pages || !baseUrl || !username || !password) return;
+  if (!['http', 'browser', 'browser-full'].includes(driver)) return;
+  if (pages || !baseUrl || !username || !password) return;
 
   const connector = eganis();
   if (typeof connector.autodetect !== 'function') return;

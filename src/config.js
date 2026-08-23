@@ -106,8 +106,9 @@ export const config = {
     // حرم ألتين — سعر السوق المعتمد في الصرافات
     haremUrl: process.env.FX_HAREM_URL || 'https://www.haremaltin.com/dovizapi/v1/doviz',
     haremField: (process.env.FX_HAREM_FIELD || 'satis').toLowerCase(), // satis | alis
-    // عند رفض الطلب المباشر: أعد المحاولة من داخل Chromium المثبَّت للوحة eganis
-    haremViaBrowser: bool(process.env.FX_HAREM_VIA_BROWSER, true),
+    // آخر الحلول عند حجب حرم ألتين: متصفّح كامل. مطفأ افتراضياً لأن الخطط
+    // الصغيرة (٥١٢ ميجا) تسقط تحته فيتعطّل التطبيق كلّه.
+    haremViaBrowser: bool(process.env.FX_HAREM_VIA_BROWSER, false),
     // الصفحة التي نفتحها قبل الطلب، ليأتي من أصل الموقع نفسه بكوكيزه
     haremPageUrl: process.env.FX_HAREM_PAGE_URL || 'https://www.haremaltin.com/canli-piyasalar',
     // الحقل المعتمد من بيانات البنك المركزي التركي

@@ -1109,8 +1109,9 @@ async function viewSettings() {
         <label>وضع الربط</label>
         <select id="set-driver">
           <option value="mock" ${f.eganisDriver.value === 'mock' ? 'selected' : ''}>تجريبي — بيانات وهمية للتجربة</option>
-          <option value="browser" ${f.eganisDriver.value === 'browser' ? 'selected' : ''}>عبر المتصفّح — بحسابك في اللوحة</option>
+          <option value="browser" ${['browser', 'http'].includes(f.eganisDriver.value) ? 'selected' : ''}>بحسابك في اللوحة — الوضع الموصى به</option>
           <option value="api" ${f.eganisDriver.value === 'api' ? 'selected' : ''}>عبر API — إن وفّره مزوّد البرنامج</option>
+          <option value="browser-full" ${f.eganisDriver.value === 'browser-full' ? 'selected' : ''}>متصفّح كامل — للوحات تُبنى بجافاسكربت (يحتاج ذاكرة كبيرة)</option>
         </select>
       </div>
 
@@ -1429,11 +1430,25 @@ async function viewSettings() {
     }
   };
 
-  document.getElementById('set-shot').onclick = () => {
+  document.getElementById('set-shot').onclick = async () => {
     const url = `/api/eganis/screenshot?token=${encodeURIComponent(state.token)}&t=${Date.now()}`;
-    box.innerHTML = `<p class="muted">هذا ما يفتحه الخادم داخل لوحة eganis الآن:</p>
-      <img src="${url}" alt="لقطة لوحة eganis"
-           style="width:100%;border:1px solid var(--border);border-radius:10px" />`;
+    box.innerHTML = '<p class="muted">ألتقط صورة لما يراه الخادم…</p>';
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${state.token}` } });
+      // وضع القراءة الخفيفة بلا متصفّح فلا صورة — نقول ذلك بدل صورة مكسورة
+      if (!res.ok || !(res.headers.get('content-type') || '').startsWith('image/')) {
+        const data = await res.json().catch(() => ({}));
+        box.innerHTML = `<div class="alert medium">${esc(data.error || 'الصورة غير متاحة')}</div>
+          <p class="muted">استخدم «لماذا فشل الدخول؟» — يقرأ نموذج لوحتك ويصفه نصّاً.</p>`;
+        return;
+      }
+      const blob = URL.createObjectURL(await res.blob());
+      box.innerHTML = `<p class="muted">هذا ما يفتحه الخادم داخل لوحة eganis الآن:</p>
+        <img src="${blob}" alt="لقطة لوحة eganis"
+             style="width:100%;border:1px solid var(--border);border-radius:10px" />`;
+    } catch (err) {
+      box.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
+    }
   };
 
   document.getElementById('set-save-fx').onclick = async () => {
