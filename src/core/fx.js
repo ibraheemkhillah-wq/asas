@@ -237,11 +237,16 @@ export async function getRate({ force = false } = {}) {
   }
 
   const failures = [];
-  for (const key of providerOrder()) {
+  const order = providerOrder();
+  for (const key of order) {
     try {
       const { rate, source } = await SOURCES[key].fn();
       const saved = store(rate, source);
       log.info(`سعر الصرف: 1 دولار = ${rate} ليرة (${source})`);
+      // نجح مصدر احتياطي بعد فشل المفضّل — نقول لماذا بدل الصمت
+      if (failures.length) {
+        log.warn(`تعذّر المصدر المفضّل — ${failures.join(' | ')}`);
+      }
       return {
         rate: saved.rate,
         source: saved.source,
