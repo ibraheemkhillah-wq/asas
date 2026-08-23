@@ -178,10 +178,36 @@ export function createHttpDriver() {
   /** وصف شكل القيمة بلا كشفها — لالتقاط أخطاء الإدخال والنسخ */
   const valueShape = (value) => describeValue(value).text;
 
+  /*
+   * تهدئة بعد الفشل — حماية للحساب لا للتطبيق.
+   *
+   * التطبيق يفتح صفحات ويفحص حالته باستمرار، وكل واحدة تستدعي دخولاً. فإن
+   * كانت البيانات خاطئة تحوّلت هذه إلى عشرات المحاولات الفاشلة في الدقيقة،
+   * وأنظمة ASP.NET تقفل الحساب بعد خمس محاولات. عندها يصير القفل نفسه هو
+   * سبب الفشل، فلا تنجح البيانات الصحيحة حين تُصحَّح.
+   *
+   * فبعد كل فشل ننتظر — دقيقة، ثم دقيقتين، حتى خمس — ونعيد الخطأ الأخير بدل
+   * طرق الباب. وأي حفظ لإعدادات جديدة يمسح التهدئة فوراً (resetEganis).
+   */
+  let failures = 0;
+  let blockedUntil = 0;
+  let lastError = null;
+
+  const cooldownMs = () => Math.min(5, failures) * 60000;
+
   async function login() {
     const { username, password } = config.eganis;
     if (!username || !password) {
       throw new HttpError(401, 'بيانات دخول eganis غير مضبوطة (EGANIS_USERNAME و EGANIS_PASSWORD)');
+    }
+
+    if (Date.now() < blockedUntil) {
+      const seconds = Math.ceil((blockedUntil - Date.now()) / 1000);
+      throw new HttpError(
+        401,
+        `${lastError} — توقّفت المحاولات ${seconds} ثانية حمايةً لحسابك من القفل. ` +
+          'صحّح البيانات في شاشة الإعدادات وسأحاول فوراً.',
+      );
     }
 
     jar.clear();
@@ -236,6 +262,9 @@ export function createHttpDriver() {
 
     if (!looksLikeLogin(result.html)) {
       loggedIn = true;
+      failures = 0;
+      blockedUntil = 0;
+      lastError = null;
       log.info('eganis(http): تم تسجيل الدخول');
       return result;
     }
@@ -248,18 +277,28 @@ export function createHttpDriver() {
     log.warn(`eganis(http): ${formSummary(form)}`);
     log.warn(`eganis(http): الطلبات: ${result.trail.join(' ← ')} · الكوكيز: ${jar.size}`);
 
-    const verdict = panelErrors.length
-      ? `رسالة اللوحة: «${panelErrors.join(' · ')}»`
+    const joined = panelErrors.join(' · ');
+    // قفل الحساب يُقال بكلمات أخرى، والخلط بينه وبين خطأ البيانات يضيّع الوقت
+    const locked = /(kilit|çok fazla|cok fazla|deneme|bloke|askıya|askiya)/i.test(joined);
+
+    const verdict = joined
+      ? `رسالة اللوحة: «${joined}»${locked ? ' — الحساب مقفل مؤقتاً، لا علاقة للبيانات' : ''}`
       : gotCookies
         ? 'اللوحة أعادت صفحة الدخول بلا رسالة — البيانات مرفوضة على الأرجح'
         : 'اللوحة لم تمنح أي كوكي — قد تكون تحجب الطلبات الآلية';
 
-    throw new HttpError(
-      401,
+    lastError =
       `فشل تسجيل الدخول — ${verdict} (المستخدم: ${username} [${valueShape(username)}] · ` +
-        `كلمة السر: ${password.length} حرفاً [${valueShape(password)}] · ` +
-        `الصفحة: ${result.url})`,
+      `كلمة السر: ${password.length} حرفاً [${valueShape(password)}] · ` +
+      `الصفحة: ${result.url})`;
+
+    failures += 1;
+    blockedUntil = Date.now() + cooldownMs();
+    log.warn(
+      `eganis(http): محاولة فاشلة رقم ${failures} — أتوقّف ${cooldownMs() / 1000} ثانية حمايةً للحساب`,
     );
+
+    throw new HttpError(401, lastError);
   }
 
   /** جلب صفحة داخل اللوحة، مع إعادة الدخول إن انتهت الجلسة */
