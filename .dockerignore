@@ -1,0 +1,12 @@
+# لا تُنسخ إلى الصورة: قد تحوي أسراراً أو تُبطئ البناء
+.git
+node_modules
+data
+.env
+.env.*
+!.env.example
+config/eganis.json
+config/company.md
+*.log
+*.db
+*.db-*

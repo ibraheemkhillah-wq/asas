@@ -23,15 +23,16 @@ WORKDIR /app
 
 # طبقة الاعتماديات منفصلة ليُعاد استخدامها بين النشرات
 COPY package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
 
-# قاعدة البيانات والملفات المرفوعة وجلسة eganis — تحتاج قرصاً دائماً
-RUN mkdir -p data && chown -R node:node /app
+# قاعدة البيانات والملفات المرفوعة وجلسة eganis — تحتاج قرصاً دائماً.
+# نبقى على المستخدم الافتراضي (root) عن قصد: منصّات الاستضافة تركّب القرص
+# بملكية root، ولو شغّلنا بمستخدم آخر لفشلت الكتابة على قاعدة البيانات.
+RUN mkdir -p data
 VOLUME ["/app/data"]
 
-USER node
 EXPOSE 3000
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=20s \

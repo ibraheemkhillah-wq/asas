@@ -102,7 +102,9 @@ EGANIS_PASSWORD=...
 وإن أردت التحكم اليدوي، عرّف `browser.pages` في `config/eganis.json` فيتقدّم على الاكتشاف.
 
 **من الجوال بلا كمبيوتر:** [`docs/deploy-mobile.md`](docs/deploy-mobile.md) —
-نشر من المتصفّح بلا سطر أوامر.
+نشر من المتصفّح بلا سطر أوامر، مع تشخيص بالصورة:
+`GET /api/eganis/screenshot` يعرض ما يراه الخادم داخل لوحة eganis،
+و`POST /api/eganis/refresh` يعيد اكتشاف الصفحات.
 
 التثبيت للتشغيل المحلي:
 

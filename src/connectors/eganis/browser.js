@@ -342,6 +342,35 @@ export function createBrowserDriver() {
       }
     },
 
+    /**
+     * لقطة لما يراه الخادم في لوحة eganis — للتشخيص من الجوال بلا كمبيوتر:
+     * هل وصلنا لصفحة الدخول؟ هل ظهر رمز تحقق؟ هل الجدول فارغ؟
+     */
+    async screenshot(pathOrKind = '') {
+      const { context: ctx } = await session();
+      const page = await ctx.newPage();
+      try {
+        let url = config.eganis.baseUrl;
+        if (pathOrKind) {
+          const pages = await discoverPages().catch(() => ({}));
+          const target = pages[pathOrKind]?.href || pathOrKind;
+          url = target.startsWith('http')
+            ? target
+            : `${config.eganis.baseUrl}${target.startsWith('/') ? '' : '/'}${target}`;
+        }
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.waitForTimeout(config.eganis.pageWaitMs);
+        return {
+          url: page.url(),
+          title: await page.title(),
+          loggedIn: await loggedIn(page),
+          image: await page.screenshot({ fullPage: true, type: 'png' }),
+        };
+      } finally {
+        await page.close();
+      }
+    },
+
     /** إعادة الاكتشاف والقراءة من الصفر — تُستدعى من زر التحديث */
     async refresh() {
       cache.clear();
