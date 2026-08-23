@@ -125,10 +125,31 @@ export function createBrowserDriver() {
     idleTimer.unref?.();
   }
 
-  /** هل نحن داخل اللوحة أم رجعنا لصفحة الدخول؟ */
+  /**
+   * هل نحن داخل اللوحة أم رجعنا لصفحة الدخول؟
+   * الحقول الظاهرة وحدها تُحتسب — لوحات كثيرة تُخبّئ نموذج «تغيير كلمة السر»
+   * في قالب الصفحة، فلو عددنا المخفيّ لظننا أننا خارج اللوحة ونحن داخلها.
+   */
   async function loggedIn(page) {
-    const hasPassword = await page.locator('input[type="password"]').count();
-    return hasPassword === 0;
+    const visiblePassword = await page
+      .locator('input[type="password"]')
+      .filter({ visible: true })
+      .count()
+      .catch(() => 1);
+    return visiblePassword === 0;
+  }
+
+  /**
+   * وصف شكل القيمة بلا كشفها — لالتقاط أخطاء النسخ إلى متغيّرات البيئة.
+   * أشهرها: علامتا اقتباس تُنسخان مع القيمة فتصير جزءاً من كلمة السر.
+   */
+  function valueShape(value) {
+    const notes = [];
+    if (/^["'].*["']$/s.test(value)) notes.push('محاطة بعلامتَي اقتباس');
+    if (/\s/.test(value)) notes.push('تحوي فراغاً');
+    if (/^\s|\s$/.test(value)) notes.push('تبدأ أو تنتهي بفراغ');
+    if (/[؀-ۿ]/.test(value)) notes.push('تحوي حروفاً عربية');
+    return notes.length ? ` (${notes.join(' · ')})` : '';
   }
 
   /**
@@ -305,6 +326,37 @@ export function createBrowserDriver() {
       dialog.dismiss().catch(() => {});
     });
 
+    /*
+     * تتبّع الطلبات أثناء الإرسال — هذه هي الإشارة الحاسمة حين ترفض اللوحة
+     * بلا رسالة، لأنها تفرّق بين ثلاث حالات تبدو واحدة على الشاشة:
+     *   • لم يخرج أي POST         → الزر لم يُرسل النموذج (جافاسكربت).
+     *   • POST ثم 200 بصفحة الدخول → اللوحة رفضت البيانات فعلاً.
+     *   • POST ثم 302 ثم رجوع للدخول → الدخول نجح لكن كوكي الجلسة لم يُحفظ.
+     */
+    const trail = [];
+    const short = (u) => {
+      try {
+        const { pathname, search } = new URL(u);
+        return (pathname + search).slice(0, 60);
+      } catch {
+        return String(u).slice(0, 60);
+      }
+    };
+    const onResponse = (res) => {
+      const req = res.request();
+      if (trail.length >= 12) return;
+      if (req.method() !== 'POST' && res.status() < 300) return; // نهتمّ بالإرسال والتحويلات
+      if (!['document', 'xhr', 'fetch'].includes(req.resourceType())) return;
+      const location = res.headers()['location'];
+      trail.push(
+        `${req.method()} ${short(res.url())} → ${res.status()}${location ? ` → ${short(location)}` : ''}`,
+      );
+    };
+    page.on('response', onResponse);
+
+    // عدّاد الكوكيز قبل الإرسال — زيادتها دليل أن اللوحة قبلت الدخول
+    const cookiesBefore = (await context.cookies().catch(() => [])).length;
+
     await Promise.all([
       page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {}),
       submit.click({ timeout: 15000 }).catch(() => {}),
@@ -350,26 +402,46 @@ export function createBrowserDriver() {
         })
         .catch(() => '');
 
+      page.off('response', onResponse);
       const after = await describeLoginForm(page);
       const moved = page.url() !== urlBefore;
+      const cookiesAfter = (await context.cookies().catch(() => [])).length;
+      const posted = trail.some((line) => line.startsWith('POST'));
 
       // نذكر اسم المستخدم وطول كلمة السر (لا قيمتها) ليتبيّن الخطأ المطبعي
       const hint =
-        `المستخدم: ${username} · كلمة السر: ${password.length} حرفاً · ` +
+        `المستخدم: ${username}${valueShape(username)} · ` +
+        `كلمة السر: ${password.length} حرفاً${valueShape(password)} · ` +
         `الصفحة: ${page.url()} · ${moved ? 'انتقلت الصفحة بعد الإرسال' : 'الصفحة لم تتغيّر بعد الإرسال'}`;
 
       const reason = panelMessage || dialogText || after?.notes?.join(' · ') || '';
 
       // بنية النموذج تُغني عن لقطة الشاشة: تُظهر أي حقل مطلوب بقي فارغاً
       log.warn(`eganis(browser): ${formSummary(after || before)}`);
+      log.warn(
+        `eganis(browser): الطلبات: ${trail.join(' ⟵ ') || 'لم يخرج أي طلب إرسال'} · ` +
+          `الكوكيز: ${cookiesBefore} ← ${cookiesAfter}`,
+      );
+
+      // ترجمة الإشارة إلى سبب مفهوم بدل تركها أرقاماً
+      let verdict = '';
+      if (!posted) {
+        verdict = 'النموذج لم يُرسَل أصلاً — الزر على الأرجح يعتمد على جافاسكربت لم يعمل';
+      } else if (cookiesAfter > cookiesBefore && !moved) {
+        verdict = 'اللوحة قبلت الدخول وأعطت كوكي لكنها أعادتنا لصفحة الدخول';
+      } else if (!reason) {
+        verdict = 'اللوحة استلمت البيانات وأعادت صفحة الدخول بلا رسالة — بيانات مرفوضة غالباً';
+      }
+      if (verdict) log.warn(`eganis(browser): التقدير: ${verdict}`);
 
       throw new HttpError(
         401,
         reason
           ? `فشل تسجيل الدخول — رسالة اللوحة: «${reason}» (${hint})`
-          : `فشل تسجيل الدخول ولم تُظهر اللوحة سبباً. راجع سطر «النموذج» في السجل (${hint})`,
+          : `فشل تسجيل الدخول — ${verdict || 'راجع سطري «النموذج» و«الطلبات» في السجل'} (${hint})`,
       );
     }
+    page.off('response', onResponse);
     log.info('eganis(browser): تم تسجيل الدخول');
   }
 
@@ -814,7 +886,9 @@ export function createBrowserDriver() {
           error: err.message,
           url: config.eganis.baseUrl,
           user: config.eganis.username,
+          userShape: valueShape(config.eganis.username).trim() || 'سليم',
           passwordLength: config.eganis.password.length,
+          passwordShape: valueShape(config.eganis.password).trim() || 'سليم',
           title,
           form,
           summary: formSummary(form),
