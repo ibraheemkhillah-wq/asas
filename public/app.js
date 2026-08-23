@@ -1091,8 +1091,157 @@ async function viewAudit() {
 
 // ===== التوجيه =====
 
+// ===== الإعدادات: ربط eganis من داخل التطبيق =====
+
+async function viewSettings() {
+  const s = await api('/api/settings');
+  const f = s.fields;
+
+  app.innerHTML = `
+    <div class="card">
+      <h2>ربط eganis</h2>
+      <p class="muted">
+        اكتب بيانات دخولك للوحة eganis هنا ويقرأ التطبيق منها مباشرة.
+        البيانات تُحفظ في خادمك أنت ولا تغادره.
+      </p>
+
+      <div class="field">
+        <label>وضع الربط</label>
+        <select id="set-driver">
+          <option value="mock" ${f.eganisDriver.value === 'mock' ? 'selected' : ''}>تجريبي — بيانات وهمية للتجربة</option>
+          <option value="browser" ${f.eganisDriver.value === 'browser' ? 'selected' : ''}>عبر المتصفّح — بحسابك في اللوحة</option>
+          <option value="api" ${f.eganisDriver.value === 'api' ? 'selected' : ''}>عبر API — إن وفّره مزوّد البرنامج</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>رابط لوحة eganis</label>
+        <input id="set-url" inputmode="url" placeholder="https://panel.eganis.com.tr"
+               value="${esc(f.eganisBaseUrl.value)}" />
+      </div>
+
+      <div class="field">
+        <label>اسم المستخدم</label>
+        <input id="set-user" autocomplete="off" value="${esc(f.eganisUsername.value)}" />
+      </div>
+
+      <div class="field">
+        <label>كلمة السر ${f.eganisPassword.set ? '<span class="badge open">محفوظة</span>' : ''}</label>
+        <input id="set-pass" type="password" autocomplete="new-password"
+               placeholder="${f.eganisPassword.set ? 'اتركها فارغة إن لم ترد تغييرها' : ''}" />
+      </div>
+
+      <div class="row">
+        <button class="btn" id="set-save">حفظ واختبار الربط</button>
+        <button class="btn ghost" id="set-shot">اعرض ما يراه الخادم</button>
+      </div>
+
+      <div id="set-result" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>سعر الصرف</h2>
+      <div class="field">
+        <label>المصدر</label>
+        <select id="set-fx">
+          <option value="harem" ${f.fxSource.value === 'harem' ? 'selected' : ''}>حرم ألتين — سعر السوق</option>
+          <option value="tcmb" ${f.fxSource.value === 'tcmb' ? 'selected' : ''}>البنك المركزي التركي</option>
+          <option value="erapi" ${f.fxSource.value === 'erapi' ? 'selected' : ''}>مصدر احتياطي</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>سعر الشركة الاحتياطي (كم ليرة للدولار)</label>
+        <input id="set-rate" type="number" step="0.01" value="${esc(f.fxManualRate.value)}" />
+      </div>
+      <div class="row"><button class="btn ghost" id="set-save-fx">حفظ</button></div>
+    </div>
+
+    ${
+      s.envLines.length || s.hasStoredSecrets
+        ? `<div class="card" style="margin-top:14px">
+             <h2>تثبيت الإعدادات على الاستضافة</h2>
+             <p class="muted">${esc(s.note)}</p>
+             <pre style="white-space:pre-wrap;font-size:13px;margin:0;direction:ltr;text-align:left">${esc(
+               [...s.envLines, ...(s.hasStoredSecrets ? ['EGANIS_PASSWORD=«كلمة السر التي أدخلتها»'] : [])].join('\n'),
+             )}</pre>
+           </div>`
+        : ''
+    }`;
+
+  const box = document.getElementById('set-result');
+
+  async function saveAndTest() {
+    box.innerHTML = '<div class="empty">جارِ الحفظ والاختبار… قد يستغرق نصف دقيقة</div>';
+    try {
+      await api('/api/settings', {
+        method: 'POST',
+        body: {
+          eganisDriver: document.getElementById('set-driver').value,
+          eganisBaseUrl: document.getElementById('set-url').value,
+          eganisUsername: document.getElementById('set-user').value,
+          eganisPassword: document.getElementById('set-pass').value,
+        },
+      });
+
+      const result = await api('/api/settings/test', { method: 'POST' });
+      if (!result.ok) {
+        box.innerHTML = `<div class="alert high">تعذّر الاتصال: ${esc(result.error || 'سبب غير معروف')}</div>
+          <p class="muted">اضغط «اعرض ما يراه الخادم» لتشخيص السبب بالصورة.</p>`;
+        return;
+      }
+
+      const pages = (result.pages || []).join('، ') || '—';
+      box.innerHTML = `
+        <div class="alert" style="background:rgba(23,121,74,.14);color:var(--ok)">
+          تم الاتصال بنجاح ✔
+        </div>
+        <div class="kv-list">
+          <div><span class="muted">الصفحات المكتشفة:</span> ${esc(pages)}</div>
+          <div><span class="muted">العقود المقروءة:</span> ${esc(String(result.sample?.contracts ?? '—'))}</div>
+          <div><span class="muted">المركبات المقروءة:</span> ${esc(String(result.sample?.vehicles ?? '—'))}</div>
+        </div>
+        ${
+          result.sample?.firstContract
+            ? `<p class="muted" style="margin-top:8px">أول عقد: ${esc(
+                result.sample.firstContract.no || '',
+              )} — ${esc(result.sample.firstContract.customerName || '')}</p>`
+            : ''
+        }
+        <p class="muted">افتح «لوحة اليوم» لترى بياناتك.</p>`;
+      toast('تم ربط eganis بنجاح');
+    } catch (err) {
+      box.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
+    }
+  }
+
+  document.getElementById('set-save').onclick = saveAndTest;
+
+  document.getElementById('set-shot').onclick = () => {
+    const url = `/api/eganis/screenshot?token=${encodeURIComponent(state.token)}&t=${Date.now()}`;
+    box.innerHTML = `<p class="muted">هذا ما يفتحه الخادم داخل لوحة eganis الآن:</p>
+      <img src="${url}" alt="لقطة لوحة eganis"
+           style="width:100%;border:1px solid var(--border);border-radius:10px" />`;
+  };
+
+  document.getElementById('set-save-fx').onclick = async () => {
+    try {
+      await api('/api/settings', {
+        method: 'POST',
+        body: {
+          fxSource: document.getElementById('set-fx').value,
+          fxManualRate: document.getElementById('set-rate').value,
+        },
+      });
+      toast('تم حفظ إعدادات سعر الصرف');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
+}
+
 const views = {
   today: viewToday,
+  settings: viewSettings,
   assistant: viewAssistant,
   contracts: viewContracts,
   fleet: viewFleet,

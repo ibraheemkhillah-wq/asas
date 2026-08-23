@@ -4,6 +4,8 @@ import { eganis } from '../connectors/eganis/index.js';
 import { whatsapp } from '../connectors/whatsapp/index.js';
 import { recentAudit } from '../core/audit.js';
 import * as inbox from '../core/inbox.js';
+import * as settings from '../core/settings.js';
+import { resetEganis } from '../connectors/eganis/index.js';
 
 export function registerSystemRoutes(router) {
   router.get('/api/health', () => ({ ok: true, service: 'callrent-ops' }), { public: true });
@@ -21,6 +23,38 @@ export function registerSystemRoutes(router) {
       whatsapp: await whatsapp().health(),
     },
   }));
+
+  // ===== الإعدادات من داخل التطبيق =====
+
+  router.get('/api/settings', () => settings.currentSettings());
+
+  router.post('/api/settings', async ({ req, actor }) => {
+    const body = await readJson(req);
+    return settings.saveSettings(body, actor);
+  });
+
+  /** اختبار الربط بعد الحفظ: هل ينجح الدخول؟ وأي صفحات اكتُشفت؟ */
+  router.post('/api/settings/test', async () => {
+    resetEganis();
+    const driver = eganis();
+    const health = await driver.health();
+    if (!health.ok) return { ok: false, ...health };
+
+    const [contracts, vehicles] = await Promise.all([
+      driver.listContracts({}).catch((err) => ({ error: err.message })),
+      driver.listVehicles({}).catch((err) => ({ error: err.message })),
+    ]);
+
+    return {
+      ok: true,
+      ...health,
+      sample: {
+        contracts: Array.isArray(contracts) ? contracts.length : contracts,
+        vehicles: Array.isArray(vehicles) ? vehicles.length : vehicles,
+        firstContract: Array.isArray(contracts) && contracts[0] ? contracts[0] : null,
+      },
+    };
+  });
 
   /**
    * لقطة لما يراه الخادم في لوحة eganis — تشخيص الربط من الجوال:

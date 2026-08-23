@@ -172,6 +172,9 @@ tbody tr:hover { background: var(--surface-2); }
 
 /* شريط سعر الصرف فوق الحسابات */
 .fx-bar { margin-bottom: 14px; }
+
+/* قائمة قيم في شاشة الإعدادات */
+.kv-list { display: grid; gap: 4px; font-size: 14px; margin-top: 8px; }
 .fx-chip {
   display: inline-flex;
   align-items: center;

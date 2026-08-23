@@ -11,6 +11,7 @@ import { registerSystemRoutes } from './routes/system.js';
 import { registerAccountingRoutes } from './routes/accounting.js';
 import { registerAssistantRoutes } from './routes/assistant.js';
 import * as fx from './core/fx.js';
+import { applyStoredSettings } from './core/settings.js';
 
 const router = createRouter();
 registerSystemRoutes(router);
@@ -66,6 +67,9 @@ const server = http.createServer(async (req, res) => {
     : 'dashboard';
   return router.run(match, req, res, { query, actor });
 });
+
+// إعدادات محفوظة من داخل التطبيق تتقدّم على متغيّرات البيئة
+applyStoredSettings();
 
 server.listen(config.port, config.host, () => {
   log.info(`Call & Rent Ops يعمل على http://${config.host}:${config.port}`);
