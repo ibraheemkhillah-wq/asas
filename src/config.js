@@ -83,6 +83,9 @@ export const config = {
     idleCloseMinutes: Number(process.env.EGANIS_IDLE_CLOSE_MINUTES || 10),
     // صفحات اختارها المستخدم من شاشة الإعدادات: {"contracts":"/x","vehicles":"/y"}
     pages: process.env.EGANIS_PAGES || '',
+    // متى نستعين بمتصفّح حقيقي للدخول (المصافحة فقط، ثم نكمل بـ HTTP):
+    // auto = عند اكتشاف أن اللوحة تعالج النموذج بجافاسكربت · always · never
+    loginViaBrowser: str(process.env.EGANIS_LOGIN_VIA_BROWSER, 'auto').toLowerCase(),
   },
 
   whatsapp: {

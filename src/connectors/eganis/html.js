@@ -256,6 +256,52 @@ const ERROR_CLASS =
 const REJECT_WORDS =
   /(hatal|yanlış|yanlis|geçersiz|gecersiz|zorunlu|boş bırak|bos birak|kilitli|başarısız|basarisiz|bulunamadı|bulunamadi)/i;
 
+/**
+ * هل نموذج الدخول يعتمد على جافاسكربت؟
+ *
+ * لوحات كثيرة تُشفّر كلمة السر أو تُلبِسها hash قبل الإرسال، أو تضيف حقلاً
+ * لا يظهر في HTML. عندها يُرفض الإرسال الخام دائماً برسالة «بيانات غير
+ * صحيحة» مهما كانت البيانات صحيحة — وهو أسوأ أنواع الفشل لأنه يشير
+ * إلى المكان الخطأ. نفحص سكربتات الصفحة لنعرف قبل أن نتّهم كلمة السر.
+ */
+const CRYPTO_WORDS =
+  /\b(md5|sha1|sha256|sha512|hmac|cryptojs|forge|jsencrypt|encrypt|hash|btoa|rsa|aes)\b/i;
+const CAPTCHA_WORDS = /\b(grecaptcha|recaptcha|hcaptcha|turnstile|captcha)\b/i;
+
+export function analyzeLoginScripts(html, form) {
+  const source = String(html ?? '');
+  const inline = [...source.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((m) => m[1])
+    .join('\n');
+
+  const sources = [...source.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((m) => m[1]);
+
+  const passwordField = form?.fields.find((f) => f.type === 'password');
+  const names = [passwordField?.name, passwordField?.id].filter(Boolean);
+  // سكربت يذكر حقل كلمة السر باسمه = يعبث بقيمتها قبل الإرسال
+  const touchesPassword = names.some((n) =>
+    new RegExp(`["'#\\[]\\s*${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(inline),
+  );
+
+  const formTag = /<form\b[^>]*\bonsubmit=/i.test(source);
+  const submitHandler = formTag || /\.(submit|on)\s*\(\s*["']?submit/i.test(inline);
+
+  return {
+    hasInlineScripts: inline.trim().length > 0,
+    externalScripts: sources.slice(0, 8),
+    submitHandler,
+    touchesPassword,
+    cryptoHints: [...new Set((inline.match(CRYPTO_WORDS) || []).concat(
+      sources.filter((s) => CRYPTO_WORDS.test(s)).map((s) => s.split('/').pop()),
+    ))].slice(0, 5),
+    captcha: CAPTCHA_WORDS.test(source),
+    /** هل يُرجَّح أن الإرسال الخام لن ينجح؟ */
+    get needsBrowser() {
+      return this.touchesPassword || this.cryptoHints.length > 0 || this.captcha;
+    },
+  };
+}
+
 export function extractErrors(html) {
   const source = String(html ?? '');
   const messages = [];

@@ -17,6 +17,7 @@ import { log } from '../../lib/log.js';
 import { arabicKeyboardToLatin, describeValue } from '../../lib/keyboard.js';
 import { classifyLink, mapRows, mappingScore, normalizeHeader } from './auto-map.js';
 import {
+  analyzeLoginScripts,
   extractErrors,
   extractLinks,
   extractTables,
@@ -192,6 +193,14 @@ export function createHttpDriver() {
   let failures = 0;
   let blockedUntil = 0;
   let lastError = null;
+  // المتصفّح يُجرَّب مرة واحدة لكل دورة تهدئة، لا عند كل محاولة
+  let browserTried = false;
+  /*
+   * لوحة ثبت أنها تحتاج متصفّحاً لا نعيد عليها الإرسال الخام. ليس توفيراً
+   * للوقت فحسب: كل محاولة فاشلة تُقرَّب الحساب من القفل، ونحن نعرف سلفاً
+   * أنها ستفشل.
+   */
+  let preferBrowserLogin = false;
 
   const cooldownMs = () => Math.min(5, failures) * 60000;
 
@@ -232,6 +241,11 @@ export function createHttpDriver() {
     if (!picked) {
       throw new HttpError(401, `نموذج الدخول بلا حقل اسم مستخدم — ${formSummary(form)}`);
     }
+    // لوحة نعرف أنها تحتاج متصفّحاً: لا نُهدر عليها محاولة فاشلة مؤكّدة
+    if (preferBrowserLogin && config.eganis.loginViaBrowser !== 'never') {
+      return loginViaBrowser({ userName: picked.field.name, passwordName: passwordField.name });
+    }
+
     if (picked.ambiguous) {
       log.warn(
         `eganis(http): نموذج الدخول فيه ${picked.candidates} حقول نصية — ` +
@@ -277,6 +291,35 @@ export function createHttpDriver() {
     log.warn(`eganis(http): ${formSummary(form)}`);
     log.warn(`eganis(http): الطلبات: ${result.trail.join(' ← ')} · الكوكيز: ${jar.size}`);
 
+    /*
+     * الإرسال الخام فشل. قبل أن نتّهم كلمة السر، نسأل الصفحة نفسها: هل
+     * جافاسكربت يعبث بالنموذج قبل الإرسال؟ إن كان كذلك فلا ذنب للبيانات،
+     * والحلّ أن يقوم متصفّح حقيقي بالمصافحة مرّة ثم نكمل نحن.
+     */
+    const scripts = analyzeLoginScripts(landing.html, form);
+    if (config.eganis.loginViaBrowser !== 'never' && !browserTried) {
+      browserTried = true;
+      if (scripts.needsBrowser || config.eganis.loginViaBrowser === 'always') {
+        log.warn(
+          'eganis(http): نموذج الدخول يعالَج بجافاسكربت' +
+            `${scripts.cryptoHints.length ? ` (${scripts.cryptoHints.join(', ')})` : ''}` +
+            ' — أنتقل إلى الدخول عبر المتصفّح',
+        );
+        try {
+          return await loginViaBrowser({
+            userName: picked.field.name,
+            passwordName: passwordField.name,
+          });
+        } catch (err) {
+          log.warn(`eganis(http): الدخول عبر المتصفّح فشل — ${err.message}`);
+          lastError = err.message;
+          failures += 1;
+          blockedUntil = Date.now() + cooldownMs();
+          throw err instanceof HttpError ? err : new HttpError(401, err.message);
+        }
+      }
+    }
+
     const joined = panelErrors.join(' · ');
     // قفل الحساب يُقال بكلمات أخرى، والخلط بينه وبين خطأ البيانات يضيّع الوقت
     const locked = /(kilit|çok fazla|cok fazla|deneme|bloke|askıya|askiya)/i.test(joined);
@@ -299,6 +342,107 @@ export function createHttpDriver() {
     );
 
     throw new HttpError(401, lastError);
+  }
+
+  /**
+   * الدخول عبر متصفّح حقيقي — مصافحة واحدة لا أكثر.
+   *
+   * حين تُشفّر اللوحة كلمة السر بجافاسكربت قبل إرسالها، لا يمكن لأي إرسال
+   * خام أن ينجح مهما كانت البيانات صحيحة. فندع المتصفّح يفعل ما يفعله
+   * صاحب الحساب: يفتح الصفحة، يكتب، يضغط. ثم نأخذ الكوكيز ونغلقه.
+   *
+   * ولأن القراءة بعدها تجري بـ HTTP، لا يبقى متصفّح مفتوحاً: ثوانٍ معدودة
+   * مرة كل جلسة، لا مئات الميجابايتات دائمة.
+   */
+  async function loginViaBrowser(form) {
+    const { username, password } = config.eganis;
+    const { findChrome } = await import('../../lib/chrome.js');
+
+    let playwright = null;
+    for (const pkg of ['playwright', 'playwright-core']) {
+      try {
+        playwright = await import(pkg);
+        break;
+      } catch {
+        /* نجرّب التالي */
+      }
+    }
+    if (!playwright) throw new HttpError(500, 'حزمة playwright غير مثبّتة');
+
+    const executablePath = findChrome();
+    if (!executablePath) throw new HttpError(500, 'لا يوجد متصفّح على الخادم');
+
+    log.info('eganis(http): الدخول عبر المتصفّح (مصافحة واحدة)');
+    const browser = await playwright.chromium.launch({
+      executablePath,
+      args: [
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--blink-settings=imagesEnabled=false',
+        '--js-flags=--max-old-space-size=192',
+        '--mute-audio',
+        '--no-first-run',
+      ],
+    });
+
+    try {
+      const context = await browser.newContext({ locale: 'tr-TR', userAgent: UA });
+      const page = await context.newPage();
+      await page.goto(base(), { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.waitForTimeout(1500);
+
+      // نستخدم أسماء الحقول التي قرأناها من النموذج — أدقّ من التخمين
+      const userSel = form?.userName ? `[name="${form.userName}"]` : 'input[type="text"], input[type="email"]';
+      const passSel = form?.passwordName ? `[name="${form.passwordName}"]` : 'input[type="password"]';
+
+      await page.locator(passSel).first().waitFor({ timeout: 20000 });
+      await page.locator(userSel).first().fill(username);
+      await page.locator(passSel).first().fill(password);
+
+      await Promise.all([
+        page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {}),
+        page
+          .locator('form:has(input[type="password"]) button[type="submit"], form:has(input[type="password"]) input[type="submit"]')
+          .first()
+          .click({ timeout: 15000 })
+          .catch(() => page.locator(passSel).first().press('Enter').catch(() => {})),
+      ]);
+      await page.waitForTimeout(2000);
+
+      const stillLogin = await page.locator('input[type="password"]').filter({ visible: true }).count();
+      if (stillLogin > 0) {
+        const message = await page
+          .evaluate(() => {
+            const nodes = document.querySelectorAll(
+              '.validation-summary-errors, .field-validation-error, .alert-danger, .text-danger, [role="alert"]',
+            );
+            return [...nodes].map((n) => (n.textContent || '').replace(/\s+/g, ' ').trim())
+              .filter(Boolean).join(' · ').slice(0, 200);
+          })
+          .catch(() => '');
+        throw new HttpError(
+          401,
+          `فشل الدخول عبر المتصفّح أيضاً${message ? ` — «${message}»` : ''} — البيانات مرفوضة من اللوحة`,
+        );
+      }
+
+      // الكوكيز هي كل ما نحتاجه؛ القراءة بعدها بـ HTTP
+      jar.clear();
+      for (const cookie of await context.cookies()) jar.map.set(cookie.name, cookie.value);
+
+      loggedIn = true;
+      failures = 0;
+      blockedUntil = 0;
+      lastError = null;
+      browserTried = false; // الجلسة القادمة تستحقّ محاولة جديدة
+      preferBrowserLogin = true; // ولا نعيد عليها الإرسال الخام الفاشل
+      log.info(`eganis(http): تم الدخول عبر المتصفّح (${jar.size} كوكي)`);
+      return { url: base(), status: 200, html: '', trail: ['browser-login'] };
+    } finally {
+      await browser.close().catch(() => {});
+    }
   }
 
   /** جلب صفحة داخل اللوحة، مع إعادة الدخول إن انتهت الجلسة */
@@ -551,9 +695,11 @@ export function createHttpDriver() {
       } catch (err) {
         let form = null;
         let title = '';
+        let scripts = null;
         try {
           const landing = await request(base());
           form = findLoginForm(landing.html);
+          scripts = analyzeLoginScripts(landing.html, form);
           title = textOf((landing.html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '');
         } catch {
           /* نكتفي بما جمعناه */
@@ -591,6 +737,13 @@ export function createHttpDriver() {
           title,
           form,
           summary: formSummary(form),
+          scripts: scripts && {
+            جافاسكربت_يمسّ_كلمة_السر: scripts.touchesPassword,
+            معالج_إرسال: scripts.submitHandler,
+            إشارات_تشفير: scripts.cryptoHints,
+            كابتشا: scripts.captcha,
+            سكربتات_خارجية: scripts.externalScripts,
+          },
           tookMs: Date.now() - started,
         };
       }

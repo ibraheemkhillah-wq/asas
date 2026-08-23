@@ -101,3 +101,32 @@ test('رسالة رفض بلا حاوية معروفة تُلتقط بالكلم
   const page = '<div class="mesaj"><span>Bu alan zorunludur.</span></div>';
   assert.ok(html.extractErrors(page).some((m) => m.includes('zorunludur')));
 });
+
+test('كشف لوحة تعالج كلمة السر بجافاسكربت', () => {
+  const page = `<form id="f" onsubmit="return prepare()">
+      <input type="text" name="UserName"><input type="password" id="Password" name="Password">
+    </form>
+    <script src="/lib/md5.min.js"></script>
+    <script>function prepare(){ document.getElementById('Password').value = CryptoJS.MD5(x); }</script>`;
+  const form = html.findLoginForm(page);
+  const scripts = html.analyzeLoginScripts(page, form);
+  assert.equal(scripts.touchesPassword, true);
+  assert.equal(scripts.submitHandler, true);
+  assert.ok(scripts.cryptoHints.length > 0);
+  assert.equal(scripts.needsBrowser, true);
+});
+
+test('لوحة عادية لا تُصنَّف كمحتاجة متصفّحاً', () => {
+  const page = `<form method="post" action="/Account/Login">
+      <input type="text" name="UserName"><input type="password" name="Password">
+      <button type="submit">Giriş</button>
+    </form>
+    <script src="/lib/bootstrap.min.js"></script>`;
+  const scripts = html.analyzeLoginScripts(page, html.findLoginForm(page));
+  assert.equal(scripts.needsBrowser, false);
+});
+
+test('كابتشا تُعدّ سبباً كافياً للمتصفّح', () => {
+  const page = '<form><input type="password" name="p"></form><div class="g-recaptcha"></div>';
+  assert.equal(html.analyzeLoginScripts(page, html.findLoginForm(page)).needsBrowser, true);
+});
