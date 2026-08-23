@@ -604,12 +604,58 @@ export function createHttpDriver() {
     ledger: 'ledgerEntry',
   };
 
+  const dedupe = (links) => {
+    const seen = new Set();
+    return links.filter((l) => l.href && !seen.has(l.href) && seen.add(l.href));
+  };
+
+  /**
+   * روابط قائمة اللوحة.
+   *
+   * تُقرأ من نصّ الصفحة أولاً. وكثير من قوالب الإدارة تبني قائمتها الجانبية
+   * بجافاسكربت، أو تُخفي وجهتها في `data-url` بدل `href`، فلا يصل من النصّ
+   * شيء وتبدو اللوحة بلا صفحات. لذا نعرض الصفحة في متصفّح حين تشحّ الروابط
+   * ونفتح القوائم المطويّة قبل القراءة.
+   */
   async function panelLinks() {
     if (!loggedIn) await login();
     const home = await fetchPage(base());
-    const links = extractLinks(home.html);
-    const seen = new Set();
-    return links.filter((l) => !seen.has(l.href) && seen.add(l.href));
+    let links = dedupe(extractLinks(home.html));
+
+    const useful = links.filter((l) => !/^https?:/i.test(l.href) || l.href.startsWith(base()));
+    if (useful.length >= 4 || config.eganis.loginViaBrowser === 'never') return links;
+
+    log.info(`eganis(http): القائمة النصّية فيها ${useful.length} رابطاً — أقرأها من المتصفّح`);
+    try {
+      const fromBrowser = await withBrowser(async (page) => {
+        await page.goto(base(), { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.waitForTimeout(config.eganis.pageWaitMs);
+
+        // القوائم المطويّة تُخفي روابطها حتى تُفتح
+        for (const selector of ['.dropdown-toggle', '[data-toggle="collapse"]', '[data-bs-toggle="collapse"]', '.has-arrow', '.nav-link']) {
+          for (const toggle of (await page.locator(selector).all().catch(() => [])).slice(0, 25)) {
+            await toggle.click({ timeout: 800 }).catch(() => {});
+          }
+        }
+        await page.waitForTimeout(600);
+
+        return page.evaluate(() => {
+          const clean = (t) => (t || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+          const out = [];
+          for (const el of document.querySelectorAll('a[href], [data-url], [data-href]')) {
+            const href = el.getAttribute('href') || el.getAttribute('data-url') || el.getAttribute('data-href');
+            if (!href || /^(#|javascript:|mailto:|tel:)/i.test(href)) continue;
+            out.push({ text: clean(el.textContent), href });
+          }
+          return out;
+        });
+      });
+      links = dedupe([...links, ...fromBrowser]);
+      log.info(`eganis(http): المتصفّح أعطى ${links.length} رابطاً`);
+    } catch (err) {
+      log.warn(`eganis(http): تعذّرت قراءة القائمة بالمتصفّح — ${err.message}`);
+    }
+    return links;
   }
 
   /** حفظ خريطة الصفحات لتسريع الإقلاع التالي (تُهمَل بلا قرص دائم) */
@@ -690,7 +736,7 @@ export function createHttpDriver() {
       })
       // الروابط التي تشبه أسماء صفحات البيانات تُفحص أولاً، فإن طال الجرد
       // كانت المهمّة قد أُنجزت قبل أن ينفد العدد
-      .sort((a, b) => (classifyLink(b.text, b.href) ? 1 : 0) - (classifyLink(a.text, a.href) ? 1 : 0))
+      .sort((a, b) => (classifyLink(b) ? 1 : 0) - (classifyLink(a) ? 1 : 0))
       .slice(0, limit);
 
     const kinds = Object.entries(MAP_KIND);
@@ -711,9 +757,34 @@ export function createHttpDriver() {
 
     let step = 0;
     const total = candidates.length;
+    const deeper = []; // روابط وجدناها داخل الصفحات الفارغة
+
     for (const link of candidates) {
       step += 1;
       onProgress?.({ index: step, total, text: link.text || link.href });
+      try {
+        const page = await fetchPage(resolve(link.href));
+        if (!scoreTables(link, extractTables(page.html), false)) {
+          emptyPages.push(link);
+          /*
+           * صفحة بلا جدول قد تكون واجهة قسم لا قائمة بيانات — والقائمة خلف
+           * رابط داخلها («Listele» أو «Sözleşme Listesi»). فنجمع روابطها
+           * لنفحصها في جولة ثانية.
+           */
+          for (const inner of extractLinks(page.html)) {
+            if (classifyLink(inner)) deeper.push(inner);
+          }
+        }
+      } catch (err) {
+        log.debug(`eganis(http): تعذّر فحص ${link.href} — ${err.message}`);
+      }
+    }
+
+    // جولة ثانية على ما وجدناه داخل الصفحات، بلا تكرار ما فُحص
+    const seenHrefs = new Set(candidates.map((l) => l.href));
+    const second = dedupe(deeper).filter((l) => !seenHrefs.has(l.href)).slice(0, 12);
+    for (const link of second) {
+      onProgress?.({ index: total, total, text: `${link.text || link.href} (أعمق)` });
       try {
         const page = await fetchPage(resolve(link.href));
         if (!scoreTables(link, extractTables(page.html), false)) emptyPages.push(link);
@@ -726,6 +797,19 @@ export function createHttpDriver() {
      * الصفحات التي خرجت فارغة قد تكون جداولها مبنيّة بجافاسكربت. نعرضها في
      * متصفّح واحد يُفتح مرّة ويُغلق — لا صفحة صفحة، ولا متصفّح مقيم.
      */
+    // أي أنواع غطّتها القراءة النصّية بالفعل؟ لا داعي لفتح متصفّح من أجلها
+    const covered = new Set(
+      examined.flatMap((e) =>
+        Object.entries(e.scores).filter(([, s]) => s.score > 0).map(([kind]) => kind),
+      ),
+    );
+    const missing = Object.keys(MAP_KIND).filter((kind) => !covered.has(kind));
+
+    if (!missing.length) {
+      log.debug('eganis(http): القراءة النصّية غطّت كل الأنواع — لا حاجة للمتصفّح');
+      emptyPages.length = 0;
+    }
+
     if (emptyPages.length && config.eganis.loginViaBrowser !== 'never') {
       log.info(`eganis(http): ${emptyPages.length} صفحة بلا جدول نصّي — أعرضها في المتصفّح`);
       try {
@@ -791,9 +875,9 @@ export function createHttpDriver() {
       };
     }
 
-    // احتياط: تسمية بالكلمات حين لا يكفي المحتوى
-    for (const link of candidates) {
-      const kind = classifyLink(link.text, link.href);
+    // احتياط: تسمية بالكلمات حين لا يكفي المحتوى — يشمل ما وجدناه في الجولة الثانية
+    for (const link of [...candidates, ...second]) {
+      const kind = classifyLink(link);
       if (kind && !found[kind] && !taken.has(link.href)) {
         found[kind] = { href: link.href, text: link.text, score: 0, byName: true };
         taken.add(link.href);

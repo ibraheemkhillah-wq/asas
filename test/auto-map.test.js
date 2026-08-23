@@ -142,3 +142,21 @@ test('مطابقة الأعمدة الإنجليزية أيضاً', () => {
   assert.equal(columns.plate, 2);
   assert.equal(columns.balance, 8);
 });
+
+/*
+ * `classifyLink` تأخذ كائناً واحداً `{text, href}`. استُدعيت مرّةً بوسيطين
+ * منفصلين، فكانت تُفكّك نصّاً فتخرج الحقول فارغة وتُرجع null دائماً — أي
+ * أن التسمية الاحتياطية للصفحات لم تكن تعمل إطلاقاً، بصمت.
+ */
+test('تصنيف الروابط يقرأ النصّ والعنوان معاً', () => {
+  assert.equal(map.classifyLink({ text: 'Listele', href: '/Sozlesme/Liste' }), 'contracts');
+  assert.equal(map.classifyLink({ text: 'İşlemler', href: '/sozlesmeler' }), 'contracts');
+  assert.equal(map.classifyLink({ text: 'Filo Yönetimi', href: '/x' }), 'vehicles');
+  assert.equal(map.classifyLink({ text: 'Listele', href: '/Cari/Liste' }), 'ledger');
+  assert.equal(map.classifyLink({ text: 'Ayarlar', href: '/settings' }), null);
+});
+
+test('استدعاؤها بوسيطين منفصلين خطأ يجب ألّا يعود', () => {
+  // لو مُرّر النصّ وحده، لا تتعرّف الدالة على شيء — نثبّت العقد صراحةً
+  assert.equal(map.classifyLink('Listele', '/Sozlesme/Liste'), null);
+});

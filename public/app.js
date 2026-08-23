@@ -1254,56 +1254,85 @@ async function viewSettings() {
     pagesBox.innerHTML = '<div class="empty">جارِ قراءة قائمة لوحتك…</div>';
     try {
       const { links } = await api('/api/eganis/links');
-      if (!links.length) {
-        pagesBox.innerHTML = '<div class="alert medium">لم أجد روابط في اللوحة — أرسل لي لقطة «اعرض ما يراه الخادم».</div>';
+      renderPicker(links || []);
+    } catch (err) {
+      // تعذّرت قراءة القائمة: نفتح خانات اللصق على أي حال بدل أن نترك المستخدم واقفاً
+      renderPicker([]);
+      toast(err.message, true);
+    }
+  }
+
+  /*
+   * اختيار الصفحات يدوياً.
+   *
+   * القائمة تُعرض حين نستطيع قراءة روابط اللوحة، لكن بعض اللوحات تبني
+   * قائمتها بجافاسكربت أو تُخفيها خلف صلاحيات، فلا يصل منها شيء. ولهذا
+   * تبقى خانة اللصق مفتوحة دائماً: يفتح صاحب الشركة الصفحة في eganis
+   * وينسخ عنوانها من شريط المتصفّح — طريق لا يفشل مهما كانت اللوحة.
+   */
+  function renderPicker(links = []) {
+    const pagesBox = document.getElementById('pages-box');
+    let chosen = {};
+    try {
+      chosen = JSON.parse(f.eganisPages.value || '{}');
+    } catch {
+      chosen = {};
+    }
+
+    const options = (kind) =>
+      [
+        '<option value="">— اختر من القائمة —</option>',
+        ...links.map(
+          (l) =>
+            `<option value="${esc(l.href)}" ${chosen[kind] === l.href ? 'selected' : ''}>${esc(
+              l.text || l.href,
+            )}${l.guess === kind ? ' ✓' : ''}</option>`,
+        ),
+      ].join('');
+
+    pagesBox.innerHTML = `
+      ${PAGE_KINDS.map(
+        ([kind, label]) => `
+        <div class="field">
+          <label>${label}</label>
+          ${links.length ? `<select data-kind="${kind}">${options(kind)}</select>` : ''}
+          <input data-paste="${kind}" type="url" inputmode="url" dir="ltr"
+                 placeholder="أو الصق رابط الصفحة من eganis"
+                 value="${esc(chosen[kind] || '')}"
+                 style="margin-top:6px;direction:ltr;text-align:left" />
+        </div>`,
+      ).join('')}
+      <div class="row"><button class="btn" id="pages-save">حفظ الصفحات واختبار القراءة</button></div>
+      <p class="muted">${
+        links.length
+          ? `وجدت ${links.length} رابطاً في لوحتك — اختر من القائمة أو الصق الرابط.`
+          : 'لم أستطع قراءة قائمة لوحتك. افتح كل صفحة في eganis وانسخ عنوانها من شريط المتصفّح والصقه هنا.'
+      }</p>`;
+
+    document.getElementById('pages-save').onclick = async () => {
+      const map = {};
+      // اللصق يتقدّم على الاختيار لأنه أصرح: كتبه صاحب الشركة بنفسه
+      pagesBox.querySelectorAll('select[data-kind]').forEach((el) => {
+        if (el.value) map[el.dataset.kind] = el.value;
+      });
+      pagesBox.querySelectorAll('input[data-paste]').forEach((el) => {
+        const value = el.value.trim();
+        if (value) map[el.dataset.paste] = value;
+      });
+
+      if (!Object.keys(map).length) {
+        toast('اختر صفحة واحدة على الأقل أو الصق رابطها', true);
         return;
       }
 
-      let chosen = {};
       try {
-        chosen = JSON.parse(f.eganisPages.value || '{}');
-      } catch {
-        chosen = {};
+        await api('/api/settings', { method: 'POST', body: { eganisPages: JSON.stringify(map) } });
+        toast('تم حفظ الصفحات — جارِ الاختبار');
+        await saveAndTest();
+      } catch (err) {
+        toast(err.message, true);
       }
-
-      const options = (kind) =>
-        [
-          '<option value="">— لا شيء —</option>',
-          ...links.map(
-            (l) =>
-              `<option value="${esc(l.href)}" ${chosen[kind] === l.href ? 'selected' : ''}>${esc(
-                l.text || l.href,
-              )}${l.guess === kind ? ' ✓' : ''}</option>`,
-          ),
-        ].join('');
-
-      pagesBox.innerHTML = `
-        ${PAGE_KINDS.map(
-          ([kind, label]) => `
-          <div class="field">
-            <label>${label}</label>
-            <select data-kind="${kind}">${options(kind)}</select>
-          </div>`,
-        ).join('')}
-        <div class="row"><button class="btn" id="pages-save">حفظ الصفحات واختبار القراءة</button></div>
-        <p class="muted">وجدت ${links.length} رابطاً في لوحتك.</p>`;
-
-      document.getElementById('pages-save').onclick = async () => {
-        const map = {};
-        pagesBox.querySelectorAll('select[data-kind]').forEach((el) => {
-          if (el.value) map[el.dataset.kind] = el.value;
-        });
-        try {
-          await api('/api/settings', { method: 'POST', body: { eganisPages: JSON.stringify(map) } });
-          toast('تم حفظ الصفحات — جارِ الاختبار');
-          await saveAndTest();
-        } catch (err) {
-          toast(err.message, true);
-        }
-      };
-    } catch (err) {
-      pagesBox.innerHTML = `<div class="alert high">${esc(err.message)}</div>`;
-    }
+    };
   }
 
   async function autodetect() {
