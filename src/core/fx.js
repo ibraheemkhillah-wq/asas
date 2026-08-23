@@ -85,6 +85,31 @@ export function pickHaremRate(json, field = 'satis') {
  * `satis` = سعر البيع (الأعلى، وهو ما يظهر في تطبيق حرم)، و`alis` = الشراء.
  */
 async function fromHarem() {
+  const field = config.fx.haremField; // satis افتراضياً
+  const label = `حرم ألتين (${field === 'alis' ? 'شراء' : 'بيع'})`;
+  try {
+    const json = await haremJson();
+    const rate = pickHaremRate(json, field);
+    // تحقّق من المعقولية حتى لا يدخل رقم مشوّه إلى الحسابات
+    if (rate < 1 || rate > 10000) throw new Error(`سعر غير معقول من حرم ألتين: ${rate}`);
+    return { rate, source: label };
+  } catch (err) {
+    if (!config.fx.haremViaBrowser) throw err;
+    /*
+     * الطلب المباشر من خادم استضافة يُرفض أحياناً (حماية من الآليات تحجب
+     * عناوين مراكز البيانات). ولأن Chromium مثبّت أصلاً لقراءة لوحة eganis،
+     * نطلب السعر من داخله: بصمة متصفّح حقيقية وكوكيز الموقع نفسه.
+     */
+    log.debug(`حرم ألتين مباشرةً: ${err.message} — أجرّب عبر المتصفّح`);
+    const json = await haremJsonViaBrowser();
+    const rate = pickHaremRate(json, field);
+    if (rate < 1 || rate > 10000) throw new Error(`سعر غير معقول من حرم ألتين: ${rate}`);
+    return { rate, source: label };
+  }
+}
+
+/** طلب مباشر إلى واجهة حرم ألتين */
+async function haremJson() {
   const url = config.fx.haremUrl;
   const res = await fetchWithTimeout(
     url,
@@ -103,12 +128,54 @@ async function fromHarem() {
     12000,
   );
   if (!res.ok) throw new Error(`حرم ألتين ${res.status}`);
-  const json = await res.json();
-  const field = config.fx.haremField; // satis افتراضياً
-  const rate = pickHaremRate(json, field);
-  // تحقّق من المعقولية حتى لا يدخل رقم مشوّه إلى الحسابات
-  if (rate < 1 || rate > 10000) throw new Error(`سعر غير معقول من حرم ألتين: ${rate}`);
-  return { rate, source: `حرم ألتين (${field === 'alis' ? 'شراء' : 'بيع'})` };
+  return res.json();
+}
+
+/**
+ * نفس الطلب لكن من داخل صفحة haremaltin.com المفتوحة في Chromium، فيمرّ
+ * بفحوص الحماية كما يمرّ متصفّح المستخدم. يُفتح عند الحاجة فقط ويُغلق فوراً
+ * حتى لا يستهلك ذاكرة الخطة الصغيرة.
+ */
+async function haremJsonViaBrowser() {
+  const { findChrome } = await import('../lib/chrome.js');
+  let playwright;
+  for (const pkg of ['playwright', 'playwright-core']) {
+    try {
+      playwright = await import(pkg);
+      break;
+    } catch {
+      /* نجرّب التالي */
+    }
+  }
+  if (!playwright) throw new Error('حرم ألتين محجوب ولا توجد حزمة playwright للبديل');
+
+  const executablePath = findChrome();
+  if (!executablePath) throw new Error('حرم ألتين محجوب ولا يوجد متصفّح على الخادم');
+
+  const browser = await playwright.chromium.launch({
+    executablePath,
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--mute-audio',
+      '--blink-settings=imagesEnabled=false', '--js-flags=--max-old-space-size=192'],
+  });
+  try {
+    const page = await browser.newPage({ locale: 'tr-TR' });
+    await page.goto(config.fx.haremPageUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    const json = await page.evaluate(async (url) => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        },
+        body: 'dil_kodu=tr',
+      });
+      if (!res.ok) throw new Error(`حرم ألتين ${res.status}`);
+      return res.json();
+    }, config.fx.haremUrl);
+    return json;
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }
 
 /** مصدر تحدّده الشركة بنفسها: أي رابط JSON + مسار الحقل داخل الاستجابة */

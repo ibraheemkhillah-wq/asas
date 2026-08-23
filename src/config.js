@@ -24,6 +24,31 @@ function loadEnvFile(file) {
 
 loadEnvFile(path.resolve(process.cwd(), '.env'));
 
+/** قيم البيئة تُنسخ يدوياً وقد تحمل فراغاً أو سطراً جديداً لا يُرى */
+const str = (value, fallback = '') => (value === undefined ? fallback : String(value).trim());
+
+/**
+ * عنوان اللوحة كما ينسخه المستخدم من شريط المتصفّح يكون غالباً رابط صفحة
+ * الدخول نفسها (…/Account/Login?ReturnUrl=…). لو أبقيناه كما هو صارت روابط
+ * الصفحات الداخلية تُبنى فوقه فتخرج معطوبة، لذا نُرجعه إلى جذر اللوحة.
+ */
+const LOGIN_PATHS = /\/(account\/login|account\/signin|identity\/account\/login|login|signin|giris|uye\/giris|kullanici\/giris)\/?$/i;
+
+export function panelBase(value) {
+  const raw = str(value);
+  if (!raw) return '';
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(withScheme);
+    url.search = '';
+    url.hash = '';
+    url.pathname = url.pathname.replace(LOGIN_PATHS, '') || '/';
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return raw.replace(/\/+$/, '');
+  }
+}
+
 const bool = (v, fallback = false) => {
   if (v === undefined || v === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(String(v).toLowerCase());
@@ -33,15 +58,16 @@ export const config = {
   port: Number(process.env.PORT || 3000),
   host: process.env.HOST || '0.0.0.0',
   timezone: process.env.TZ || 'Asia/Hebron',
-  appToken: process.env.APP_TOKEN || '',
+  appToken: str(process.env.APP_TOKEN),
   dbPath: process.env.DB_PATH || './data/callrent.db',
   allowWrites: bool(process.env.ALLOW_WRITES, true),
 
   eganis: {
-    driver: process.env.EGANIS_DRIVER || 'mock',
-    baseUrl: (process.env.EGANIS_BASE_URL || '').replace(/\/$/, ''),
-    username: process.env.EGANIS_USERNAME || '',
-    password: process.env.EGANIS_PASSWORD || '',
+    driver: str(process.env.EGANIS_DRIVER, 'mock'),
+    baseUrl: panelBase(process.env.EGANIS_BASE_URL),
+    username: str(process.env.EGANIS_USERNAME),
+    // كلمة السر تُقلَّم من الأطراف فقط — قد تحوي فراغاً في وسطها عمداً
+    password: str(process.env.EGANIS_PASSWORD),
     apiKey: process.env.EGANIS_API_KEY || '',
     auth: process.env.EGANIS_AUTH || 'bearer',
     apiKeyHeader: process.env.EGANIS_API_KEY_HEADER || 'X-API-KEY',
@@ -80,6 +106,10 @@ export const config = {
     // حرم ألتين — سعر السوق المعتمد في الصرافات
     haremUrl: process.env.FX_HAREM_URL || 'https://www.haremaltin.com/dovizapi/v1/doviz',
     haremField: (process.env.FX_HAREM_FIELD || 'satis').toLowerCase(), // satis | alis
+    // عند رفض الطلب المباشر: أعد المحاولة من داخل Chromium المثبَّت للوحة eganis
+    haremViaBrowser: bool(process.env.FX_HAREM_VIA_BROWSER, true),
+    // الصفحة التي نفتحها قبل الطلب، ليأتي من أصل الموقع نفسه بكوكيزه
+    haremPageUrl: process.env.FX_HAREM_PAGE_URL || 'https://www.haremaltin.com/canli-piyasalar',
     // الحقل المعتمد من بيانات البنك المركزي التركي
     tcmbField: process.env.FX_TCMB_FIELD || 'ForexSelling',
     // مصدر تحدّده الشركة: أي رابط JSON ومسار الحقل داخله

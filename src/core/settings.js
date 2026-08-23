@@ -12,7 +12,7 @@
  * إعادة تشغيل، لذا تعرض الواجهة نصّ متغيّرات البيئة لتثبيتها في الاستضافة.
  */
 import { all, get, run } from '../db.js';
-import { config } from '../config.js';
+import { config, panelBase } from '../config.js';
 import { log } from '../lib/log.js';
 import { record } from './audit.js';
 import { resetEganis } from '../connectors/eganis/index.js';
@@ -66,7 +66,9 @@ export function applyStoredSettings() {
   return applied;
 }
 
-const normalizeUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
+// نُرجع الرابط إلى جذر اللوحة: النسخ من شريط المتصفّح يأتي غالباً برابط
+// صفحة الدخول نفسه، وبناء الصفحات الداخلية فوقه يُخرج روابط معطوبة.
+const normalizeUrl = (value) => panelBase(value);
 
 /** القيم الحالية للعرض — بلا كلمات سر */
 export function currentSettings() {

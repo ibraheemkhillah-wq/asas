@@ -53,6 +53,20 @@ function profile() {
 
 const PAGES_CACHE = path.resolve(process.cwd(), 'data/eganis-pages.json');
 
+/**
+ * بناء رابط صفحة داخلية. روابط اللوحة تأتي بثلاث صور: مطلقة، وجذرية تبدأ بـ
+ * «/»، ونسبية. `new URL` يتعامل مع الثلاث كما يتعامل معها المتصفّح نفسه،
+ * فالجذرية تُبنى على أصل الموقع لا على مسار اللوحة.
+ */
+function pageUrl(href) {
+  const base = config.eganis.baseUrl;
+  try {
+    return new URL(href, `${base}/`).toString();
+  } catch {
+    return `${base}${href.startsWith('/') ? '' : '/'}${href}`;
+  }
+}
+
 export function createBrowserDriver() {
   let browser = null;
   let context = null;
@@ -136,28 +150,86 @@ export function createBrowserDriver() {
       : page.locator('input[type="password"]').first();
     await passwordField.waitFor({ timeout: 15000 });
 
-    // حقل اسم المستخدم: المعرَّف يدوياً، أو أول حقل نصي قبل حقل كلمة السر
+    /*
+     * حقل اسم المستخدم داخل نموذج الدخول نفسه لا في أي مكان من الصفحة:
+     * لوحات كثيرة تضع مربّع بحث في الترويسة، فلو أخذنا «أول حقل نصي» لكتبنا
+     * الاسم فيه وأرسلنا النموذج فارغاً. نبحث في النموذج الحاوي لكلمة السر،
+     * ونقبل الحقول الظاهرة فقط.
+     */
     const userField = spec.usernameSelector
       ? page.locator(spec.usernameSelector)
       : page
-          .locator('input[type="text"], input[type="email"], input:not([type]), input[name*="user" i], input[name*="kullanici" i]')
+          .locator('form:has(input[type="password"])')
+          .first()
+          .locator('input[type="text"], input[type="email"], input[type="tel"], input:not([type])')
+          .filter({ visible: true })
           .first();
 
-    await userField.fill(username);
+    // بلا نموذج حاوٍ (حقول متناثرة في الصفحة) نرجع للبحث العام
+    const userFieldFinal = (await userField.count().catch(() => 0))
+      ? userField
+      : page
+          .locator('input[type="text"], input[type="email"], input:not([type])')
+          .filter({ visible: true })
+          .first();
+
+    await userFieldFinal.fill(username);
     await passwordField.fill(password);
+
+    const formScope = page.locator('form:has(input[type="password"])').first();
+    const submitInForm = formScope.locator(
+      'button[type="submit"], input[type="submit"], button:not([type])',
+    ).filter({ visible: true }).first();
 
     const submit = spec.submitSelector
       ? page.locator(spec.submitSelector)
-      : page.locator('button[type="submit"], input[type="submit"], button:has-text("Giriş"), button:has-text("Login")').first();
+      : (await submitInForm.count().catch(() => 0))
+        ? submitInForm
+        : page
+            .locator('button[type="submit"], input[type="submit"], button:has-text("Giriş"), button:has-text("Login")')
+            .first();
 
     await Promise.all([
       page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {}),
-      submit.click({ timeout: 15000 }),
+      submit.click({ timeout: 15000 }).catch(() => {}),
     ]);
     await page.waitForTimeout(1500);
 
+    // بعض النماذج لا تستجيب للنقر على الزر بل لمفتاح الإدخال
     if (!(await loggedIn(page))) {
-      throw new HttpError(401, 'فشل تسجيل الدخول إلى eganis — تحقّق من اسم المستخدم وكلمة السر');
+      await Promise.all([
+        page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}),
+        passwordField.press('Enter').catch(() => {}),
+      ]);
+      await page.waitForTimeout(1500);
+    }
+
+    if (!(await loggedIn(page))) {
+      // اللوحة نفسها تقول سبب الرفض عادةً — ننقله بدل رسالة عامة
+      const panelMessage = await page
+        .evaluate(() => {
+          const selectors = [
+            '.validation-summary-errors', '.field-validation-error', '.alert-danger',
+            '.alert-error', '.text-danger', '[role="alert"]', '.error-message', '.invalid-feedback',
+          ].join(', ');
+          const texts = [...document.querySelectorAll(selectors)]
+            .map((node) => (node.textContent || '').replace(/\s+/g, ' ').trim())
+            .filter(Boolean);
+          return [...new Set(texts)].join(' · ').slice(0, 250);
+        })
+        .catch(() => '');
+
+      // نذكر اسم المستخدم وطول كلمة السر (لا قيمتها) ليتبيّن الخطأ المطبعي
+      const hint =
+        `المستخدم: ${username} · كلمة السر: ${password.length} حرفاً · ` +
+        `الصفحة: ${page.url()}`;
+
+      throw new HttpError(
+        401,
+        panelMessage
+          ? `فشل تسجيل الدخول — رسالة اللوحة: «${panelMessage}» (${hint})`
+          : `فشل تسجيل الدخول ولم تُظهر اللوحة سبباً. تحقّق من صحة البيانات (${hint})`,
+      );
     }
     log.info('eganis(browser): تم تسجيل الدخول');
   }
@@ -186,7 +258,16 @@ export function createBrowserDriver() {
     await page.goto(config.eganis.baseUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1200);
     if (!(await loggedIn(page))) {
-      await autoLogin(page, spec);
+      try {
+        await autoLogin(page, spec);
+      } catch (err) {
+        // جلسة محفوظة تالفة تُفشل كل محاولة تالية — نتخلّص منها فوراً
+        if (fs.existsSync(sessionFile)) {
+          fs.rmSync(sessionFile, { force: true });
+          log.warn('eganis(browser): حُذفت الجلسة المحفوظة بعد فشل الدخول');
+        }
+        throw err;
+      }
       // احفظ الجلسة الجديدة لإعادة استخدامها بعد إعادة التشغيل
       try {
         fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
@@ -348,9 +429,7 @@ export function createBrowserDriver() {
 
     const { context: ctx } = await session();
     const page = await ctx.newPage();
-    const url = target.href.startsWith('http')
-      ? target.href
-      : `${config.eganis.baseUrl}${target.href.startsWith('/') ? '' : '/'}${target.href}`;
+    const url = pageUrl(target.href);
 
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -459,9 +538,7 @@ export function createBrowserDriver() {
       for (const [index, link] of candidates.entries()) {
         onProgress?.({ index: index + 1, total: candidates.length, text: link.text || link.href });
 
-        const url = link.href.startsWith('http')
-          ? link.href
-          : `${base}${link.href.startsWith('/') ? '' : '/'}${link.href}`;
+        const url = pageUrl(link.href);
         const page = await ctx.newPage();
         try {
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -558,10 +635,7 @@ export function createBrowserDriver() {
         let url = config.eganis.baseUrl;
         if (pathOrKind) {
           const pages = await discoverPages().catch(() => ({}));
-          const target = pages[pathOrKind]?.href || pathOrKind;
-          url = target.startsWith('http')
-            ? target
-            : `${config.eganis.baseUrl}${target.startsWith('/') ? '' : '/'}${target}`;
+          url = pageUrl(pages[pathOrKind]?.href || pathOrKind);
         }
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await page.waitForTimeout(config.eganis.pageWaitMs);
