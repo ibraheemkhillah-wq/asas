@@ -80,6 +80,18 @@ export function registerSystemRoutes(router) {
   });
 
   /**
+   * تشخيص الدخول بالنص — يقول ماذا يطلب نموذج اللوحة فعلاً:
+   *   /api/eganis/login-check
+   */
+  router.get('/api/eganis/login-check', async () => {
+    const driver = eganis();
+    if (typeof driver.loginDiagnose !== 'function') {
+      throw new HttpError(501, `تشخيص الدخول متاح في وضع المتصفّح فقط (الحالي: ${driver.name})`);
+    }
+    return driver.loginDiagnose();
+  });
+
+  /**
    * اكتشاف الصفحات بفحص محتواها. يستغرق دقيقة أو أكثر لأنه يزور صفحات
    * اللوحة واحدة واحدة، فيعمل في الخلفية والواجهة تسأل عن تقدّمه.
    */

@@ -132,6 +132,98 @@ export function createBrowserDriver() {
   }
 
   /**
+   * وصف نموذج الدخول كما هو فعلاً: كل حقل باسمه ونوعه ونصّه التوضيحي وعنوانه.
+   *
+   * هذا ما يُخرجنا من التخمين. لوحة رفضت الدخول ولم تقل سبباً غالباً لم
+   * تستلم النموذج أصلاً — إمّا لأن فيها حقلاً ثالثاً (كود الشركة مثلاً) تركناه
+   * فارغاً، أو لأن الزر لا يرسل النموذج بل يستدعي جافاسكربت.
+   */
+  async function describeLoginForm(page) {
+    return page
+      .evaluate(() => {
+        const form = document.querySelector('form:has(input[type="password"])')
+          || document.querySelector('form')
+          || document.body;
+
+        const labelOf = (el) => {
+          if (el.labels?.length) return el.labels[0].textContent;
+          if (el.id) return document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.textContent || '';
+          return el.closest('label')?.textContent || '';
+        };
+        const clean = (s) => (s || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        const shown = (el) => !!(el.offsetParent || el.getClientRects().length);
+
+        const fields = [...form.querySelectorAll('input, select, textarea')].map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          type: (el.getAttribute('type') || 'text').toLowerCase(),
+          name: clean(el.getAttribute('name')),
+          id: clean(el.id),
+          placeholder: clean(el.getAttribute('placeholder')),
+          label: clean(labelOf(el)),
+          required: el.required,
+          visible: shown(el),
+          filled: !!el.value,
+        }));
+
+        const buttons = [...form.querySelectorAll('button, input[type="submit"], a.btn')].map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          type: clean(el.getAttribute('type')),
+          text: clean(el.textContent || el.value),
+          onclick: !!el.getAttribute('onclick'),
+        }));
+
+        // أي نص ظاهر يشبه رسالة رفض، ولو لم يكن في حاوية معروفة
+        const words = /(hatal|yanlış|yanlis|geçersiz|gecersiz|hata|zorunlu|boş|bos|doğrula|dogrula|kilitli|başarısız|basarisiz)/i;
+        const notes = [...form.querySelectorAll('span, div, p, li, label')]
+          .filter((el) => shown(el) && el.children.length === 0 && words.test(el.textContent || ''))
+          .map((el) => clean(el.textContent))
+          .filter(Boolean);
+
+        return {
+          action: clean(form.getAttribute?.('action')) || '(بلا action)',
+          method: clean(form.getAttribute?.('method')) || 'GET',
+          fields,
+          buttons,
+          notes: [...new Set(notes)].slice(0, 4),
+        };
+      })
+      .catch(() => null);
+  }
+
+  /** سطر واحد مقروء يصف النموذج، يُوضع في السجل */
+  function formSummary(info) {
+    if (!info) return 'تعذّر قراءة النموذج';
+    const field = (f) =>
+      `${f.name || f.id || '?'}[${f.type}]${f.required ? '*' : ''}${f.filled ? '=مُعبّأ' : ''}`;
+    const visible = info.fields.filter((f) => f.visible && f.type !== 'hidden');
+    const parts = [
+      `النموذج: ${info.method} ${info.action}`,
+      `الحقول الظاهرة (${visible.length}): ${visible.map(field).join(' · ') || 'لا شيء'}`,
+      `الأزرار: ${info.buttons.map((b) => `«${b.text}»[${b.type || 'بلا نوع'}${b.onclick ? '+js' : ''}]`).join(' · ') || 'لا شيء'}`,
+    ];
+    if (info.notes.length) parts.push(`ملاحظات الصفحة: ${info.notes.join(' · ')}`);
+    return parts.join(' | ');
+  }
+
+  /*
+   * ترجيح حقل اسم المستخدم بالكلمات التي تحيط به، لا بترتيبه في الصفحة.
+   * لوحات تركية كثيرة تسبق حقل المستخدم بحقل «كود الشركة»، فلو أخذنا الأول
+   * كتبنا البريد في الكود وأرسلنا النموذج ناقصاً — فيُرفض بلا رسالة.
+   */
+  const USER_WORDS = /(kullanici|kullanıcı|user|email|e-?posta|eposta|mail|login|giris|giriş|adi|adı)/i;
+  const NOT_USER_WORDS = /(firma|şirket|sirket|company|kod|code|captcha|guvenlik|güvenlik|dogrula|doğrula|ara|search|sube|şube)/i;
+
+  function scoreUserField(f) {
+    const hay = `${f.name} ${f.id} ${f.placeholder} ${f.label}`;
+    let score = 0;
+    if (USER_WORDS.test(hay)) score += 3;
+    if (NOT_USER_WORDS.test(hay)) score -= 4;
+    if (f.type === 'email') score += 2;
+    if (f.required) score += 1;
+    return score;
+  }
+
+  /**
    * تسجيل دخول تلقائي: نكتشف حقول النموذج بدل الاعتماد على محدِّدات مكتوبة،
    * لأن لوحات eganis تختلف قليلاً بين التركيبات.
    */
@@ -150,36 +242,51 @@ export function createBrowserDriver() {
       : page.locator('input[type="password"]').first();
     await passwordField.waitFor({ timeout: 15000 });
 
+    // وصف النموذج قبل أي كتابة — نحتاجه للتشخيص إن فشل الدخول
+    const before = await describeLoginForm(page);
+
     /*
-     * حقل اسم المستخدم داخل نموذج الدخول نفسه لا في أي مكان من الصفحة:
-     * لوحات كثيرة تضع مربّع بحث في الترويسة، فلو أخذنا «أول حقل نصي» لكتبنا
-     * الاسم فيه وأرسلنا النموذج فارغاً. نبحث في النموذج الحاوي لكلمة السر،
-     * ونقبل الحقول الظاهرة فقط.
+     * حقل اسم المستخدم: المحدَّد يدوياً، وإلا أفضل مرشّح بالكلمات المحيطة
+     * داخل النموذج الحاوي لكلمة السر. مربّع البحث في الترويسة أو حقل «كود
+     * الشركة» يخرجان بالترجيح السالب.
      */
-    const userField = spec.usernameSelector
-      ? page.locator(spec.usernameSelector)
-      : page
-          .locator('form:has(input[type="password"])')
-          .first()
-          .locator('input[type="text"], input[type="email"], input[type="tel"], input:not([type])')
-          .filter({ visible: true })
-          .first();
+    const formScope = page.locator('form:has(input[type="password"])').first();
+    const hasForm = (await formScope.count().catch(() => 0)) > 0;
+    const scope = hasForm ? formScope : page;
+    const TEXT_INPUTS = 'input[type="text"], input[type="email"], input[type="tel"], input:not([type])';
 
-    // بلا نموذج حاوٍ (حقول متناثرة في الصفحة) نرجع للبحث العام
-    const userFieldFinal = (await userField.count().catch(() => 0))
-      ? userField
-      : page
-          .locator('input[type="text"], input[type="email"], input:not([type])')
-          .filter({ visible: true })
-          .first();
+    let userField;
+    if (spec.usernameSelector) {
+      userField = page.locator(spec.usernameSelector);
+    } else {
+      const candidates = (before?.fields || []).filter(
+        (f) => f.tag === 'input' && f.visible && ['text', 'email', 'tel'].includes(f.type),
+      );
+      const best = candidates
+        .map((f, i) => ({ f, i, score: scoreUserField(f) }))
+        .sort((a, b) => b.score - a.score || a.i - b.i)[0];
 
-    await userFieldFinal.fill(username);
+      userField =
+        best && best.score > 0 && best.f.name
+          ? scope.locator(`input[name="${best.f.name}"]`).first()
+          : scope.locator(TEXT_INPUTS).filter({ visible: true }).first();
+
+      // حقول نصية ظاهرة أكثر من واحد = اللوحة تطلب شيئاً زائداً عن الاسم
+      if (candidates.length > 1) {
+        log.warn(
+          `eganis(browser): نموذج الدخول فيه ${candidates.length} حقول نصية — ` +
+            `اخترت «${best?.f.name || best?.f.placeholder || '?'}» لاسم المستخدم`,
+        );
+      }
+    }
+
+    await userField.fill(username);
     await passwordField.fill(password);
 
-    const formScope = page.locator('form:has(input[type="password"])').first();
-    const submitInForm = formScope.locator(
-      'button[type="submit"], input[type="submit"], button:not([type])',
-    ).filter({ visible: true }).first();
+    const submitInForm = scope
+      .locator('button[type="submit"], input[type="submit"], button:not([type])')
+      .filter({ visible: true })
+      .first();
 
     const submit = spec.submitSelector
       ? page.locator(spec.submitSelector)
@@ -188,6 +295,15 @@ export function createBrowserDriver() {
         : page
             .locator('button[type="submit"], input[type="submit"], button:has-text("Giriş"), button:has-text("Login")')
             .first();
+
+    const urlBefore = page.url();
+
+    // نافذة تنبيه جافاسكربت تُجمّد الصفحة إن لم تُغلق، ونصّها هو سبب الرفض
+    let dialogText = '';
+    page.on('dialog', (dialog) => {
+      dialogText = dialog.message().replace(/\s+/g, ' ').trim().slice(0, 200);
+      dialog.dismiss().catch(() => {});
+    });
 
     await Promise.all([
       page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {}),
@@ -204,6 +320,20 @@ export function createBrowserDriver() {
       await page.waitForTimeout(1500);
     }
 
+    // آخر محاولة: إرسال النموذج برمجياً، لتخطّي زر يعتمد على جافاسكربت معطّل
+    if (!(await loggedIn(page)) && hasForm && page.url() === urlBefore) {
+      await Promise.all([
+        page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}),
+        page
+          .evaluate(() => {
+            const form = document.querySelector('form:has(input[type="password"])');
+            if (form) HTMLFormElement.prototype.submit.call(form);
+          })
+          .catch(() => {}),
+      ]);
+      await page.waitForTimeout(1500);
+    }
+
     if (!(await loggedIn(page))) {
       // اللوحة نفسها تقول سبب الرفض عادةً — ننقله بدل رسالة عامة
       const panelMessage = await page
@@ -211,6 +341,7 @@ export function createBrowserDriver() {
           const selectors = [
             '.validation-summary-errors', '.field-validation-error', '.alert-danger',
             '.alert-error', '.text-danger', '[role="alert"]', '.error-message', '.invalid-feedback',
+            '.toast-message', '.swal2-html-container', '#toast-container',
           ].join(', ');
           const texts = [...document.querySelectorAll(selectors)]
             .map((node) => (node.textContent || '').replace(/\s+/g, ' ').trim())
@@ -219,16 +350,24 @@ export function createBrowserDriver() {
         })
         .catch(() => '');
 
+      const after = await describeLoginForm(page);
+      const moved = page.url() !== urlBefore;
+
       // نذكر اسم المستخدم وطول كلمة السر (لا قيمتها) ليتبيّن الخطأ المطبعي
       const hint =
         `المستخدم: ${username} · كلمة السر: ${password.length} حرفاً · ` +
-        `الصفحة: ${page.url()}`;
+        `الصفحة: ${page.url()} · ${moved ? 'انتقلت الصفحة بعد الإرسال' : 'الصفحة لم تتغيّر بعد الإرسال'}`;
+
+      const reason = panelMessage || dialogText || after?.notes?.join(' · ') || '';
+
+      // بنية النموذج تُغني عن لقطة الشاشة: تُظهر أي حقل مطلوب بقي فارغاً
+      log.warn(`eganis(browser): ${formSummary(after || before)}`);
 
       throw new HttpError(
         401,
-        panelMessage
-          ? `فشل تسجيل الدخول — رسالة اللوحة: «${panelMessage}» (${hint})`
-          : `فشل تسجيل الدخول ولم تُظهر اللوحة سبباً. تحقّق من صحة البيانات (${hint})`,
+        reason
+          ? `فشل تسجيل الدخول — رسالة اللوحة: «${reason}» (${hint})`
+          : `فشل تسجيل الدخول ولم تُظهر اللوحة سبباً. راجع سطر «النموذج» في السجل (${hint})`,
       );
     }
     log.info('eganis(browser): تم تسجيل الدخول');
@@ -628,12 +767,81 @@ export function createBrowserDriver() {
      * لقطة لما يراه الخادم في لوحة eganis — للتشخيص من الجوال بلا كمبيوتر:
      * هل وصلنا لصفحة الدخول؟ هل ظهر رمز تحقق؟ هل الجدول فارغ؟
      */
+    /**
+     * تشخيص الدخول بالنص: ماذا يطلب نموذج اللوحة فعلاً، وهل نجح الدخول.
+     * أخفّ من الصورة وأوضح للقراءة من الجوال.
+     */
+    async loginDiagnose() {
+      const started = Date.now();
+      try {
+        const { context: ctx } = await session();
+        const page = await ctx.newPage();
+        try {
+          return {
+            ok: true,
+            url: config.eganis.baseUrl,
+            user: config.eganis.username,
+            passwordLength: config.eganis.password.length,
+            title: await page.title().catch(() => ''),
+            tookMs: Date.now() - started,
+          };
+        } finally {
+          await page.close();
+        }
+      } catch (err) {
+        // افتح صفحة الدخول نظيفةً واقرأ بنيتها — هذا ما يكشف الحقل الناقص
+        let form = null;
+        let title = '';
+        const fresh = await launchBrowser().catch(() => null);
+        if (fresh) {
+          const ctx = await fresh.newContext({ locale: 'tr-TR' });
+          const page = await ctx.newPage();
+          try {
+            await page.goto(config.eganis.baseUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+            await page.waitForTimeout(config.eganis.pageWaitMs);
+            title = await page.title().catch(() => '');
+            form = await describeLoginForm(page);
+          } catch {
+            /* نكتفي بما جمعناه */
+          } finally {
+            await page.close().catch(() => {});
+            await ctx.close().catch(() => {});
+            if (fresh !== browser) await fresh.close().catch(() => {});
+          }
+        }
+        return {
+          ok: false,
+          error: err.message,
+          url: config.eganis.baseUrl,
+          user: config.eganis.username,
+          passwordLength: config.eganis.password.length,
+          title,
+          form,
+          summary: formSummary(form),
+          tookMs: Date.now() - started,
+        };
+      }
+    },
+
     async screenshot(pathOrKind = '') {
-      const { context: ctx } = await session();
+      let ctx;
+      let loginError = '';
+      try {
+        ({ context: ctx } = await session());
+      } catch (err) {
+        /*
+         * فشل الدخول هو أكثر لحظة نحتاج فيها لقطة الشاشة، فلا يصحّ أن تمنعها.
+         * نفتح متصفّحاً بلا جلسة ونصوّر صفحة الدخول كما هي.
+         */
+        loginError = err.message;
+        browser = browser || (await launchBrowser());
+        ctx = await browser.newContext({ locale: 'tr-TR' });
+      }
+
       const page = await ctx.newPage();
       try {
         let url = config.eganis.baseUrl;
-        if (pathOrKind) {
+        if (pathOrKind && !loginError) {
           const pages = await discoverPages().catch(() => ({}));
           url = pageUrl(pages[pathOrKind]?.href || pathOrKind);
         }
@@ -643,10 +851,13 @@ export function createBrowserDriver() {
           url: page.url(),
           title: await page.title(),
           loggedIn: await loggedIn(page),
+          loginError: loginError || undefined,
+          form: loginError ? formSummary(await describeLoginForm(page)) : undefined,
           image: await page.screenshot({ fullPage: true, type: 'png' }),
         };
       } finally {
         await page.close();
+        if (loginError) await ctx.close().catch(() => {});
       }
     },
 
