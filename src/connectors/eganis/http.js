@@ -14,6 +14,7 @@ import path from 'node:path';
 import { config } from '../../config.js';
 import { HttpError } from '../../lib/http.js';
 import { log } from '../../lib/log.js';
+import { arabicKeyboardToLatin, describeValue } from '../../lib/keyboard.js';
 import { classifyLink, mapRows, mappingScore, normalizeHeader } from './auto-map.js';
 import {
   extractErrors,
@@ -174,14 +175,8 @@ export function createHttpDriver() {
     );
   }
 
-  /** وصف شكل القيمة بلا كشفها — لالتقاط أخطاء النسخ إلى متغيّرات البيئة */
-  function valueShape(value) {
-    const notes = [];
-    if (/^["'].*["']$/s.test(value)) notes.push('محاطة بعلامتَي اقتباس');
-    if (/\s/.test(value)) notes.push('تحوي فراغاً');
-    if (/[؀-ۿ]/.test(value)) notes.push('تحوي حروفاً عربية');
-    return notes.join(' · ') || 'سليم';
-  }
+  /** وصف شكل القيمة بلا كشفها — لالتقاط أخطاء الإدخال والنسخ */
+  const valueShape = (value) => describeValue(value).text;
 
   async function login() {
     const { username, password } = config.eganis;
@@ -524,14 +519,36 @@ export function createHttpDriver() {
         } catch {
           /* نكتفي بما جمعناه */
         }
+        /*
+         * أحرف عربية في كلمة سر لاتينية = لوحة المفاتيح كانت عربية وقت
+         * كتابتها. الخانة تُظهر نقاطاً فلا شيء ينبّه صاحبها. نعرض النسخة
+         * المصحّحة ليتعرّف عليها بنفسه — ولا نستبدلها من تلقائنا.
+         */
+        const pw = describeValue(password);
+        const user = describeValue(username);
+        const fix = pw.arabicKeyboard
+          ? {
+              field: 'كلمة السر',
+              reason: 'مكتوبة بأحرف عربية — كانت لوحة المفاتيح عربية وقت كتابتها',
+              suggestion: arabicKeyboardToLatin(password),
+            }
+          : user.arabicKeyboard
+            ? {
+                field: 'اسم المستخدم',
+                reason: 'مكتوب بأحرف عربية — كانت لوحة المفاتيح عربية وقت كتابته',
+                suggestion: arabicKeyboardToLatin(username),
+              }
+            : null;
+
         return {
           ok: false,
           error: err.message,
           url: base(),
           user: username,
-          userShape: valueShape(username),
+          userShape: user.text,
           passwordLength: password.length,
-          passwordShape: valueShape(password),
+          passwordShape: pw.text,
+          fix,
           title,
           form,
           summary: formSummary(form),

@@ -1401,8 +1401,21 @@ async function viewSettings() {
         d.summary || '',
       ].join('\n');
 
+      /*
+       * حين يكون السبب معروفاً (لوحة مفاتيح عربية) نقوله أولاً وبوضوح،
+       * ونعرض النسخة المصحّحة ليتعرّف عليها صاحبها ويعتمدها بضغطة.
+       */
+      const fixCard = d.fix
+        ? `<div class="alert medium" style="margin-top:10px">
+             <strong>${esc(d.fix.field)}</strong> ${esc(d.fix.reason)}.<br>
+             هل هذه هي؟ <code style="font-size:14px;letter-spacing:.5px">${esc(d.fix.suggestion)}</code>
+           </div>
+           <button class="btn" id="diag-fix">نعم — استخدمها واختبر الربط</button>`
+        : '';
+
       box.innerHTML = `
         <div class="alert high">${esc(d.error || 'فشل الدخول')}</div>
+        ${fixCard}
         <table style="width:100%;font-size:13px;margin-top:8px">
           ${line('الرابط', d.url)}
           ${line('المستخدم', `${d.user} — ${d.userShape}`)}
@@ -1414,6 +1427,14 @@ async function viewSettings() {
              background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px"
           >${esc(d.summary || '—')}</pre>
         <button class="btn ghost" id="diag-copy">انسخ التقرير</button>`;
+
+      if (d.fix) {
+        document.getElementById('diag-fix').onclick = () => {
+          const target = d.fix.field === 'كلمة السر' ? 'set-pass' : 'set-user';
+          document.getElementById(target).value = d.fix.suggestion;
+          saveAndTest();
+        };
+      }
 
       document.getElementById('diag-copy').onclick = async () => {
         try {
