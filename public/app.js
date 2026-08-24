@@ -1097,8 +1097,34 @@ async function viewSettings() {
   const s = await api('/api/settings');
   const f = s.fields;
 
+  /*
+   * تحذير في أول الشاشة لا في آخرها.
+   *
+   * ما يُحفظ من داخل التطبيق يعيش في قاعدة بيانات الخادم، وهي على استضافة
+   * بلا قرص دائم تُمحى مع كل نشر. فتُصحَّح كلمة السر وينجح الدخول، ثم يأتي
+   * أول نشر فتعود القيمة القديمة ويفشل — وتبدو المشكلة وكأنها عادت من الصفر.
+   */
+  const volatileCard = s.volatile?.length
+    ? `<div class="card" style="border-color:#b8860b;background:rgba(184,134,11,.08)">
+         <h2 style="margin-top:0">⚠️ إعداداتك مؤقّتة — ثبّتها الآن</h2>
+         <p>حفظتَ من داخل التطبيق: <strong>${esc(s.volatile.join('، '))}</strong>.
+            هذه تعيش في قاعدة بيانات الخادم، و<strong>تُمحى مع أول تحديث للتطبيق</strong>
+            لأن خطة الاستضافة بلا قرص دائم — فيعود الربط إلى القيم القديمة ويفشل الدخول.</p>
+         <p class="muted">الحل مرّة واحدة: انسخها إلى <strong>Environment</strong> في لوحة الاستضافة.
+            القيم هناك تبقى بعد كل تحديث.</p>
+         <div class="row"><button class="btn" id="pin-copy">انسخ الأسطر للصقها في الاستضافة</button></div>
+         <pre id="pin-lines" style="white-space:pre-wrap;font-size:13px;direction:ltr;text-align:left;margin:10px 0 0">${esc(
+           [
+             ...s.envLines,
+             ...(s.passwordSource === 'db' ? ['EGANIS_PASSWORD=«اكتبها في الخانة أدناه ثم احفظ لتظهر هنا»'] : []),
+           ].join('\n') || '—',
+         )}</pre>
+       </div>`
+    : '';
+
   app.innerHTML = `
-    <div class="card">
+    ${volatileCard}
+    <div class="card" ${volatileCard ? 'style="margin-top:14px"' : ''}>
       <h2>ربط eganis</h2>
       <p class="muted">
         اكتب بيانات دخولك للوحة eganis هنا ويقرأ التطبيق منها مباشرة.
@@ -1185,8 +1211,66 @@ async function viewSettings() {
 
   const box = document.getElementById('set-result');
 
+  /*
+   * أسطر التثبيت على الاستضافة.
+   *
+   * كلمة السر تُؤخذ من الخانة التي كتبها صاحب الشركة قبل قليل، ولا تُطلب من
+   * الخادم أبداً — فالخادم لا يعيد الأسرار. تُعرض له وحده على شاشته ليضعها
+   * في متغيّرات البيئة مرّة واحدة، فتنجو من كل تحديث.
+   */
+  let typedPassword = '';
+
+  function pinBlock(pages = '') {
+    const lines = [];
+    const url = document.getElementById('set-url')?.value.trim();
+    const user = document.getElementById('set-user')?.value.trim();
+    if (url) lines.push(`EGANIS_BASE_URL=${url}`);
+    if (user) lines.push(`EGANIS_USERNAME=${user}`);
+    if (typedPassword) lines.push(`EGANIS_PASSWORD=${typedPassword}`);
+    lines.push('EGANIS_DRIVER=browser');
+    // تثبيت الصفحات يوفّر إعادة اكتشافها عند كل إقلاع
+    if (pages) lines.push(`EGANIS_PAGES=${pages}`);
+    if (!lines.length) return '';
+
+    return `<div class="alert medium" style="margin-top:12px">
+        <strong>ثبّتها في الاستضافة الآن</strong> — ما حفظتَه هنا يُمحى مع أول تحديث.
+        ضعها في <strong>Environment</strong> عند Render مرّة واحدة فتبقى للأبد.
+      </div>
+      <pre id="pin-lines" style="white-space:pre-wrap;font-size:13px;direction:ltr;text-align:left;
+           background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px">${esc(lines.join('\n'))}</pre>
+      <button class="btn" id="pin-copy">انسخ الأسطر</button>`;
+  }
+
+  /** خريطة الصفحات كما استقرّت على الخادم بعد الاختبار */
+  async function currentPages() {
+    try {
+      const fresh = await api('/api/settings');
+      return fresh.fields?.eganisPages?.value || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function wirePin() {
+    const btn = document.getElementById('pin-copy');
+    if (!btn) return;
+    btn.onclick = async () => {
+      const text = document.getElementById('pin-lines')?.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        toast('تم النسخ — الصقها في Environment عند Render');
+      } catch {
+        toast('حدّد النص وانسخه يدوياً', true);
+      }
+    };
+  }
+
+  wirePin(); // زر البطاقة العلوية إن ظهرت
+
   async function saveAndTest() {
     box.innerHTML = '<div class="empty">جارِ الحفظ والاختبار… قد يستغرق نصف دقيقة</div>';
+    // نحتفظ بما كُتب في الخانة لنعرضه في أسطر التثبيت — لا يُطلب من الخادم
+    typedPassword = document.getElementById('set-pass')?.value.trim() || typedPassword;
     try {
       await api('/api/settings', {
         method: 'POST',
@@ -1201,7 +1285,9 @@ async function viewSettings() {
       const result = await api('/api/settings/test', { method: 'POST' });
       if (!result.ok) {
         box.innerHTML = `<div class="alert high">تعذّر الاتصال: ${esc(result.error || 'سبب غير معروف')}</div>
-          <p class="muted">اضغط «لماذا فشل الدخول؟» ليقرأ الخادم نموذج لوحتك ويقول ما ينقصه.</p>`;
+          <p class="muted">اضغط «لماذا فشل الدخول؟» ليقرأ الخادم نموذج لوحتك ويقول ما ينقصه.</p>
+          ${pinBlock()}`;
+        wirePin();
         return;
       }
 
@@ -1233,7 +1319,10 @@ async function viewSettings() {
                  لم أتعرّف على صفحات لوحتك من أسمائها — اضغط «اكتشف صفحاتي تلقائياً» أدناه.
                </div>`
             : '<p class="muted">افتح «لوحة اليوم» لترى بياناتك.</p>'
-        }`;
+        }
+        ${pinBlock(await currentPages())}`;
+
+      wirePin();
       // لا نفتح شيئاً تلقائياً: الاكتشاف التلقائي بضغطة واحدة أدناه
       toast(missing.length ? 'الدخول نجح — بقي تحديد الصفحات' : 'تم ربط eganis بنجاح');
     } catch (err) {

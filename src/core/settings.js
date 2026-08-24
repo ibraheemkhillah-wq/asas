@@ -74,13 +74,35 @@ const normalizeUrl = (value) => panelBase(value);
 export function currentSettings() {
   const stored = readAll();
   const view = {};
+
+  /*
+   * من أين تأتي كل قيمة فعلاً؟ سؤال يبدو تفصيلاً وهو ليس كذلك.
+   *
+   * ما يُحفظ من داخل التطبيق يعيش في قاعدة البيانات، وقاعدة البيانات على
+   * استضافة بلا قرص دائم تُمحى مع كل نشر. فتُصحَّح كلمة السر فينجح الدخول،
+   * ثم يأتي أول نشر فتعود القيمة القديمة من متغيّرات البيئة ويفشل الدخول —
+   * وتبدو المشكلة وكأنها عادت من الصفر بلا سبب. فنقولها صراحةً: هذه القيمة
+   * مؤقّتة وتلك ثابتة.
+   */
+  const sourceOf = (key, field) => {
+    if (stored[key] !== undefined) return 'db';
+    const [section, name] = field.path;
+    return config[section][name] ? 'env' : 'none';
+  };
+
   for (const [key, field] of Object.entries(FIELDS)) {
     const [section, name] = field.path;
     const live = config[section][name];
+    const source = sourceOf(key, field);
     view[key] = field.secret
-      ? { set: Boolean(live), label: field.label }
-      : { value: live ?? '', label: field.label, fromApp: stored[key] !== undefined };
+      ? { set: Boolean(live), label: field.label, source }
+      : { value: live ?? '', label: field.label, fromApp: source === 'db', source };
   }
+
+  const volatileKeys = Object.entries(FIELDS)
+    .filter(([key]) => stored[key] !== undefined)
+    .map(([, field]) => field.label);
+
   return {
     fields: view,
     /** أسطر جاهزة للصق في إعدادات الاستضافة كي تبقى بعد إعادة التشغيل */
@@ -88,6 +110,9 @@ export function currentSettings() {
       .filter(([key, field]) => stored[key] && !field.secret)
       .map(([key, field]) => `${field.env}=${stored[key]}`),
     hasStoredSecrets: Object.entries(FIELDS).some(([key, f]) => f.secret && stored[key]),
+    /** قيم تعيش في قاعدة البيانات وحدها — تُمحى مع أول نشر */
+    volatile: volatileKeys,
+    passwordSource: view.eganisPassword?.source || 'none',
     note:
       'القيم محفوظة في قاعدة بيانات خادمك. إن كانت استضافتك بلا قرص دائم فستُمحى مع ' +
       'إعادة التشغيل — انسخ الأسطر أدناه إلى متغيّرات البيئة عندك لتثبيتها.',
