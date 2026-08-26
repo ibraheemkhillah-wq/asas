@@ -62,3 +62,16 @@ test('إرسال رسالة عبر سائق المحاكاة يُسجَّل كم
   assert.equal(messages.at(-1).status, 'sent');
   assert.equal(messages.at(-1).direction, 'out');
 });
+
+test('«متأخر» حكم التطبيق لا حالة في eganis', async () => {
+  const ops = await import('../src/core/ops.js');
+  const past = { status: 'open', endAt: '2020-01-01T00:00:00' };
+  const future = { status: 'open', endAt: '2999-01-01T00:00:00' };
+  const closed = { status: 'closed', endAt: '2020-01-01T00:00:00' };
+
+  assert.equal(ops.isOverdue(past), true);
+  assert.equal(ops.isOverdue(future), false);
+  assert.equal(ops.isOverdue(closed), false);
+  // ولو صرّحت اللوحة بها قبلناها كما هي
+  assert.equal(ops.isOverdue({ status: 'overdue', endAt: '2999-01-01T00:00:00' }), true);
+});

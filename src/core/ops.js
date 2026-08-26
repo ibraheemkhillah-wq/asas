@@ -34,9 +34,7 @@ export async function overview() {
   const bookings = snap.bookings || [];
   const tasks = snap.tasks || [];
 
-  const overdue = contracts.filter(
-    (c) => c.status === 'overdue' || (c.status === 'open' && new Date(c.endAt).getTime() < now),
-  );
+  const overdue = contracts.filter((c) => isOverdue(c, now));
   const dueToday = contracts.filter((c) => c.status === 'open' && dayKey(c.endAt) === t);
   const pickupsToday = bookings.filter((b) => dayKey(b.pickupAt) === t && b.status !== 'cancelled');
   const openTasksToday = tasks.filter((x) => x.status !== 'done' && dayKey(x.at) === t);
@@ -91,7 +89,23 @@ export async function overview() {
 }
 
 export const listVehicles = (filter) => eganis().listVehicles(filter);
-export const listContracts = (filter) => eganis().listContracts(filter);
+/**
+ * «متأخر» ليست حالة في eganis بل حكمٌ يصدره التطبيق: عقد مفتوح مضى موعد
+ * إرجاعه. فلو مرّرناها إلى الموصّل كما هي بحث عن حالة بهذا الاسم فلم يجدها
+ * وأعاد لا شيء — بينما لوحة اليوم تعدّ المتأخرات بالحساب نفسه وتعرضها.
+ * نطبّقها هنا لتتّفق كل الشاشات على تعريف واحد مهما كان الموصّل.
+ */
+export const isOverdue = (contract, now = Date.now()) =>
+  contract.status === 'overdue' ||
+  (contract.status === 'open' && new Date(contract.endAt).getTime() < now);
+
+export async function listContracts(filter = {}) {
+  const { status, ...rest } = filter || {};
+  if (status !== 'overdue') return eganis().listContracts(filter);
+  const rows = await eganis().listContracts(rest);
+  const now = Date.now();
+  return rows.filter((c) => isOverdue(c, now));
+}
 export const listBookings = (filter) => eganis().listBookings(filter);
 export const listTasks = (filter) => eganis().listTasks(filter);
 export const searchCustomers = (q) => eganis().searchCustomers(q);

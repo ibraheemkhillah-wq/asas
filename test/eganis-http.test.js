@@ -205,3 +205,30 @@ test('بيانات دخول خاطئة تُعيد رسالة اللوحة نفس
   assert.match(result.summary, /UserName/);
   assert.match(result.summary, /__RequestVerificationToken/);
 });
+
+test('البحث الحرّ يصفّي بالاسم واللوحة ورقم العقد', async (t) => {
+  const { server, port } = await startPanel();
+  t.after(() => server.close());
+
+  const driver = await driverFor(port);
+  /*
+   * `q` بحث حرّ لا اسم عمود. كان يُعامَل كعمود فيُقارَن row.q بالنص، فلا
+   * يطابق شيئاً أبداً وتخرج شاشة العقود فارغة عند أي بحث.
+   */
+  assert.equal((await driver.listContracts({ q: 'Leyla' })).length, 1);
+  assert.equal((await driver.listContracts({ q: 'Leyla' }))[0].no, 'CR-2043');
+  assert.equal((await driver.listContracts({ q: '34 ABC 123' }))[0].no, 'CR-2041');
+  assert.equal((await driver.listContracts({ q: 'CR-2041' }))[0].customerName, 'Ahmet Nassar');
+  assert.equal((await driver.listContracts({ q: 'لا يوجد' })).length, 0);
+  // بحث فارغ لا يصفّي شيئاً
+  assert.equal((await driver.listContracts({ q: '' })).length, 2);
+});
+
+test('التصفية بالحالة تبقى مطابقة تامّة', async (t) => {
+  const { server, port } = await startPanel();
+  t.after(() => server.close());
+
+  const driver = await driverFor(port);
+  assert.equal((await driver.listContracts({ status: 'open' })).length, 2);
+  assert.equal((await driver.listContracts({ status: 'closed' })).length, 0);
+});

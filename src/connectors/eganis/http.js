@@ -958,14 +958,50 @@ export function createHttpDriver() {
     return rows;
   }
 
+  /** يوم محلّي بصيغة YYYY-MM-DD — لا نحوّل إلى UTC فينزاح يوم الشركة */
+  const dayKey = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  /**
+   * تصفية السجلات.
+   *
+   * `q` بحث حرّ في قيم السجل لا اسم عمود — كان يُعامَل كعمود فيُقارَن
+   * `row.q` بالنص فلا يطابق شيئاً أبداً وتخرج النتائج فارغة. و`date` يُطابق
+   * أياً من تواريخ السجل، وما بقي مطابقةٌ تامّة للعمود.
+   */
   const filterRows = (rows, filter) => {
-    if (!filter || !Object.keys(filter).length) return rows;
-    return rows.filter((row) =>
-      Object.entries(filter).every(([key, value]) => {
-        if (value === undefined || value === null || value === '') return true;
-        return String(row[key] ?? '').toLowerCase() === String(value).toLowerCase();
-      }),
-    );
+    const { status, date, q, ...exact } = filter || {};
+    const needle = String(q ?? '').trim().toLowerCase();
+    if (!status && !date && !needle && !Object.keys(exact).length) return rows;
+
+    return rows.filter((row) => {
+      if (status && String(row.status ?? '').toLowerCase() !== String(status).toLowerCase()) {
+        return false;
+      }
+      if (date) {
+        const days = [row.startAt, row.endAt, row.pickupAt, row.dropoffAt, row.occurredAt]
+          .map(dayKey)
+          .filter(Boolean);
+        if (!days.includes(date)) return false;
+      }
+      if (needle) {
+        const hay = Object.values(row)
+          .filter((v) => v !== null && v !== undefined && typeof v !== 'object')
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      for (const [key, value] of Object.entries(exact)) {
+        if (value === undefined || value === null || value === '') continue;
+        if (String(row[key] ?? '').toLowerCase() !== String(value).toLowerCase()) return false;
+      }
+      return true;
+    });
   };
 
   const notSupported = (what) => {
