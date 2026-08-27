@@ -591,10 +591,21 @@ export function createHttpDriver() {
 
   // ===== اكتشاف الصفحات =====
 
+  /*
+   * روابط لا تحوي بيانات تشغيل — نوفّر وقت فحصها. وأهمّها روابط الجلسة:
+   * فتح رابط الخروج يُنهي جلستنا في eganis، فاستبعاده حمايةٌ لا توفيرُ وقت.
+   */
   const SKIP_WORDS = [
-    'cikis', 'logout', 'ayarlar', 'profil', 'hesabim', 'yardim', 'destek',
+    'cikis', 'logout', 'logoff', 'signout', 'oturum', 'login', 'signin', 'giris',
+    'ayarlar', 'profil', 'hesabim', 'yardim', 'destek',
     'sifre', 'password', 'kullanici', 'yetki', 'log', 'bildirim', 'hakkinda',
   ];
+
+  /** فحص أخير قبل فتح أي رابط — لا يُفتح رابط جلسة بحال */
+  const isSessionLink = (link) =>
+    /\b(logout|logoff|signout|cikis|oturum|login|signin)\b/.test(
+      normalizeHeader(`${link.text} ${link.href}`),
+    );
 
   const MAP_KIND = {
     contracts: 'contract',
@@ -730,6 +741,7 @@ export function createHttpDriver() {
       .filter((link) => {
         const hay = normalizeHeader(`${link.text} ${link.href}`);
         if (!hay) return false;
+        if (isSessionLink(link)) return false;
         if (SKIP_WORDS.some((word) => hay.includes(word))) return false;
         if (/^https?:\/\//i.test(link.href) && !link.href.startsWith(origin)) return false;
         return true;
@@ -900,6 +912,20 @@ export function createHttpDriver() {
       throw new HttpError(
         501,
         `لم أعثر على صفحة "${kind}" في لوحتك — اختَرها يدوياً من شاشة الإعدادات`,
+      );
+    }
+
+    /*
+     * حارسٌ أخير: خريطة صفحات قديمة قد تحمل رابط خروج صُنّف خطأً، وفتحُه
+     * يُنهي جلستنا. نرفضه هنا مهما كان مصدر الخريطة — اكتشافاً أو إعداداً.
+     */
+    if (isSessionLink({ text: target.text || '', href: target.href })) {
+      delete discovered[kind];
+      persistPages();
+      throw new HttpError(
+        501,
+        `صفحة "${kind}" المحفوظة تشير إلى رابط خروج (${target.href}) — أزلتها. ` +
+          'اضغط «اكتشف صفحاتي تلقائياً» أو اختَرها يدوياً من شاشة الإعدادات.',
       );
     }
 

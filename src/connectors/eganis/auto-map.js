@@ -292,7 +292,10 @@ export function mappingScore(headers, kind) {
  * (مثل "car" التي تقع داخل "cari hesap" وتعني الحساب لا المركبة).
  */
 export const PAGE_HINTS = [
-  { kind: 'ledger', words: ['cari', 'hesap', 'tahsilat', 'odeme', 'kasa', 'ekstre', 'account', 'payment'] },
+  // «account» وحدها كانت هنا فطابقت ‎/Account/Logout‎ وصُنّفت دفتر حسابات —
+  // فصار التطبيق يفتح صفحة الخروج كلما قرأ الحسابات ويُخرج نفسه من اللوحة.
+  // الكلمات الآن خاصّة بالمحاسبة لا بمسار الحساب الشخصي.
+  { kind: 'ledger', words: ['cari', 'hesap', 'tahsilat', 'odeme', 'kasa', 'ekstre', 'muhasebe', 'payment', 'current account'] },
   { kind: 'contracts', words: ['sozlesme', 'kiralama', 'kontrat', 'contract', 'rental'] },
   { kind: 'bookings', words: ['rezervasyon', 'reservation', 'booking'] },
   { kind: 'customers', words: ['musteri', 'customer', 'client', 'kiraci'] },
@@ -300,8 +303,16 @@ export const PAGE_HINTS = [
   { kind: 'documents', words: ['belge', 'dosya', 'evrak', 'document', 'foto', 'resim'] },
 ];
 
+/**
+ * روابط الجلسة والحساب الشخصي: لا تحمل بيانات تشغيل، وفتحها ضارّ —
+ * رابط الخروج يُنهي جلستنا في eganis. تُرفض مهما طابقت كلماتٌ أخرى.
+ */
+const SESSION_LINK =
+  /\b(logout|logoff|log out|signout|sign out|cikis|oturumu kapat|login|signin|sign in|giris yap|account logout|account logoff)\b/;
+
 export function classifyLink({ text = '', href = '' }) {
   const haystack = `${normalizeHeader(text)} ${normalizeHeader(href)}`;
+  if (SESSION_LINK.test(haystack)) return null;
   for (const hint of PAGE_HINTS) {
     if (hint.words.some((word) => haystack.includes(word))) return hint.kind;
   }

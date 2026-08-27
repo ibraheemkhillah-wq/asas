@@ -160,3 +160,23 @@ test('استدعاؤها بوسيطين منفصلين خطأ يجب ألّا ي
   // لو مُرّر النصّ وحده، لا تتعرّف الدالة على شيء — نثبّت العقد صراحةً
   assert.equal(map.classifyLink('Listele', '/Sozlesme/Liste'), null);
 });
+
+/*
+ * كلمة «account» كانت ضمن كلمات دفتر الحسابات، فطابقت ‎/Account/Logout‎
+ * وصُنّفت الصفحة دفتراً. النتيجة أن التطبيق يفتح رابط الخروج كلما قرأ
+ * الحسابات فيُنهي جلسته في eganis بنفسه — عطبٌ صامت ومكلف.
+ */
+test('روابط الجلسة تُرفض مهما طابقت كلماتٍ أخرى', () => {
+  assert.equal(map.classifyLink({ text: 'Çıkış', href: '/Account/Logout' }), null);
+  assert.equal(map.classifyLink({ text: '', href: '/Account/Logout' }), null);
+  assert.equal(map.classifyLink({ text: 'Logout', href: '/Account/LogOff' }), null);
+  assert.equal(map.classifyLink({ text: 'Giriş Yap', href: '/Account/Login' }), null);
+  assert.equal(map.classifyLink({ text: 'Hesabım', href: '/Account/Index' }), null);
+});
+
+test('صفحات الحسابات الحقيقية ما زالت تُعرف', () => {
+  assert.equal(map.classifyLink({ text: 'Cari Hesap', href: '/CariHesap/Index' }), 'ledger');
+  assert.equal(map.classifyLink({ text: 'Finans', href: '/Cari/Liste' }), 'ledger');
+  assert.equal(map.classifyLink({ text: 'Tahsilat', href: '/x' }), 'ledger');
+  assert.equal(map.classifyLink({ text: 'Muhasebe', href: '/y' }), 'ledger');
+});
