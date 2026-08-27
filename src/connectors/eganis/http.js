@@ -646,10 +646,27 @@ export function createHttpDriver() {
     const home = await fetchPage(base());
     let links = dedupe(extractLinks(home.html));
 
-    const useful = links.filter((l) => !/^https?:/i.test(l.href) || l.href.startsWith(base()));
-    if (useful.length >= 4 || config.eganis.loginViaBrowser === 'never') return links;
+    /*
+     * متى نستعين بالمتصفّح لقراءة القائمة؟
+     *
+     * لا يكفي عدّ الروابط: لوحةٌ قائمتها مبنيّة بجافاسكربت تعطينا مع ذلك
+     * روابط الترويسة والتذييل — خروجاً ومبدّل لغة وملفاً شخصياً — فيبدو
+     * العدد كافياً ولا نفتح المتصفّح، ولا تُكتشف صفحةٌ واحدة. فنعدّ ما قد
+     * يكون صفحة بيانات فعلاً: ما بقي بعد استبعاد روابط الجلسة والإجراءات.
+     */
+    const dataish = links.filter((l) => {
+      if (/^https?:/i.test(l.href) && !l.href.startsWith(base())) return false;
+      if (isSessionLink(l) || isActionLink(l)) return false;
+      const hay = normalizeHeader(`${l.text} ${l.href}`);
+      return hay && !SKIP_WORDS.some((word) => hay.includes(word));
+    });
 
-    log.info(`eganis(http): القائمة النصّية فيها ${useful.length} رابطاً — أقرأها من المتصفّح`);
+    if (dataish.length >= 3 || config.eganis.loginViaBrowser === 'never') return links;
+
+    log.info(
+      `eganis(http): ${links.length} رابطاً في نصّ الصفحة، منها ${dataish.length} فقط قد تكون ` +
+        'صفحات بيانات — أقرأ القائمة من المتصفّح',
+    );
     try {
       const fromBrowser = await withBrowser(async (page) => {
         await page.goto(base(), { waitUntil: 'domcontentloaded', timeout: 45000 });

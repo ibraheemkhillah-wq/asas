@@ -56,7 +56,7 @@ const NOISE = `<a href="/setlang?culture=en&returnUrl=%2F">EN</a>
 const tableHtml = (t) => `<table><thead><tr>${t.headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
 <tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 
-function startPanel({ withActionLinks = false } = {}) {
+function startPanel({ withActionLinks = false, jsMenu = false } = {}) {
   const pairs = new Map();
   const cookieOf = (req, name) =>
     (req.headers.cookie || '').split(';').map((s) => s.trim())
@@ -116,10 +116,23 @@ function startPanel({ withActionLinks = false } = {}) {
     }
 
     const key = url.split('/')[1];
-    const menu = MENU + (withActionLinks ? NOISE : '');
+    const jsShell = `<header>
+      <a href="/setlang?culture=en&returnUrl=%2F">EN</a>
+      <a href="/setlang?culture=ar&returnUrl=%2F">AR</a>
+      <a href="/Account/Index">Hesabım</a>
+      <a href="/Account/Logout">Çıkış</a></header>
+      <nav id="sidebar"></nav>
+      <script>
+      var m=[['Sözleşmeler','/Sozlesme/Index'],['Araçlar','/Arac/Index'],
+             ['Müşteriler','/Musteri/Index'],['Cari Hesap','/CariHesap/Index']];
+      document.getElementById('sidebar').innerHTML=m.map(function(i){
+        return '<a href="'+i[1]+'">'+i[0]+'</a>'}).join('');
+      </script>`;
+    const menu = jsMenu ? jsShell : MENU + (withActionLinks ? NOISE : '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(TABLES[key]
-      ? `<!doctype html><title>${key}</title>${menu}${tableHtml(TABLES[key])}`
+    const table = TABLES[key];
+    return res.end(table
+      ? `<!doctype html><title>${key}</title>${menu}${tableHtml(table)}`
       : `<!doctype html><title>Eganis Panel</title>${menu}<h1>Hoş geldiniz</h1>`);
   });
 
@@ -128,17 +141,17 @@ function startPanel({ withActionLinks = false } = {}) {
   });
 }
 
-async function driverFor(port, password = PASS) {
+async function driverFor(port, password = PASS, { allowBrowser = false } = {}) {
   process.env.EGANIS_BASE_URL = `http://127.0.0.1:${port}/Account/Login?ReturnUrl=%2F`;
   process.env.EGANIS_USERNAME = USER;
   process.env.EGANIS_PASSWORD = password;
-  process.env.EGANIS_LOGIN_VIA_BROWSER = 'never'; // الاختبار بلا متصفّح
+  process.env.EGANIS_LOGIN_VIA_BROWSER = allowBrowser ? 'auto' : 'never';
   process.env.EGANIS_CACHE_SECONDS = '0';
   const { config, panelBase } = await import('../src/config.js');
   config.eganis.baseUrl = panelBase(process.env.EGANIS_BASE_URL);
   config.eganis.username = USER;
   config.eganis.password = password;
-  config.eganis.loginViaBrowser = 'never';
+  config.eganis.loginViaBrowser = allowBrowser ? 'auto' : 'never';
   config.eganis.cacheSeconds = 0;
   config.eganis.pages = '';
   const { createHttpDriver } = await import('../src/connectors/eganis/http.js');
@@ -264,4 +277,23 @@ test('روابط تُغيّر شيئاً لا تُفحص ولا تُصنَّف �
   // والصفحات الحقيقية ما زالت تُكتشف رغم الضجيج
   assert.equal(found.contracts?.href, '/Sozlesme/Index');
   assert.equal(found.ledger?.href, '/CariHesap/Index');
+});
+
+test('قائمة مبنيّة بجافاسكربت تُقرأ رغم وجود روابط جانبية في النصّ', async (t) => {
+  /*
+   * لوحةٌ قائمتها بجافاسكربت تعطي مع ذلك روابط ترويسة — خروجاً ومبدّل لغة
+   * وملفاً شخصياً. كان الاكتشاف يعدّها روابط كافية فلا يفتح المتصفّح، ولا
+   * تُكتشف صفحةٌ واحدة: البيانات لا تصل والسبب لا يظهر.
+   */
+  const { server, port } = await startPanel({ jsMenu: true });
+  t.after(() => server.close());
+
+  const driver = await driverFor(port, PASS, { allowBrowser: true });
+  const { found } = await driver.autodetect({});
+
+  assert.equal(found.contracts?.href, '/Sozlesme/Index', 'العقود لم تُكتشف');
+  assert.equal(found.ledger?.href, '/CariHesap/Index', 'الحسابات لم تُكتشف');
+  for (const [kind, page] of Object.entries(found)) {
+    assert.doesNotMatch(page.href, /setlang|logout|account/i, `${kind}: ${page.href}`);
+  }
 });
