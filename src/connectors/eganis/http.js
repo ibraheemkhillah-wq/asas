@@ -607,6 +607,19 @@ export function createHttpDriver() {
       normalizeHeader(`${link.text} ${link.href}`),
     );
 
+  /*
+   * روابط تُغيّر شيئاً بدل أن تعرضه.
+   *
+   * أخطرها مبدّل اللغة (‎/setlang?culture=…‎): يبدو صفحةً لأنه يعيدنا إلى
+   * الرئيسية بجدولها، فيُصنَّف صفحةَ بيانات — ثم يقلب لغة اللوحة عند كل
+   * قراءة، فتتغيّر عناوين الأعمدة التركية التي نفهم الجداول بها.
+   */
+  const ACTION_LINK =
+    /\b(setlang|setculture|culture|changelang|lang|dil degistir|tema|theme|delete|sil|kaldir|remove|yeni|new|ekle|create|duzenle|edit|guncelle|update|export|excel|yazdir|print|indir|download|onayla|approve|iptal|cancel)\b/;
+
+  const isActionLink = (link) =>
+    ACTION_LINK.test(normalizeHeader(`${link.text} ${link.href}`));
+
   const MAP_KIND = {
     contracts: 'contract',
     vehicles: 'vehicle',
@@ -741,7 +754,7 @@ export function createHttpDriver() {
       .filter((link) => {
         const hay = normalizeHeader(`${link.text} ${link.href}`);
         if (!hay) return false;
-        if (isSessionLink(link)) return false;
+        if (isSessionLink(link) || isActionLink(link)) return false;
         if (SKIP_WORDS.some((word) => hay.includes(word))) return false;
         if (/^https?:\/\//i.test(link.href) && !link.href.startsWith(origin)) return false;
         return true;
@@ -771,11 +784,34 @@ export function createHttpDriver() {
     const total = candidates.length;
     const deeper = []; // روابط وجدناها داخل الصفحات الفارغة
 
+    /*
+     * صفحةٌ واحدة لا تُحسب مرّتين.
+     *
+     * روابط كثيرة تنتهي بعد التحويلات إلى الصفحة نفسها — مبدّل اللغة يعود
+     * إلى الرئيسية مثلاً. لولا هذا لحُسب جدول الرئيسية مرّةً لكل واحد منها
+     * وصُنّفت تلك الروابط صفحاتِ بيانات وهي ليست كذلك.
+     */
+    const landedOn = new Set([new URL(base()).pathname || '/']);
+
     for (const link of candidates) {
       step += 1;
       onProgress?.({ index: step, total, text: link.text || link.href });
       try {
         const page = await fetchPage(resolve(link.href));
+
+        const landing = (() => {
+          try {
+            return new URL(page.url).pathname || '/';
+          } catch {
+            return page.url;
+          }
+        })();
+        if (landedOn.has(landing)) {
+          log.debug(`eganis(http): ${link.href} ينتهي إلى ${landing} — صفحة رأيناها`);
+          continue;
+        }
+        landedOn.add(landing);
+
         if (!scoreTables(link, extractTables(page.html), false)) {
           emptyPages.push(link);
           /*

@@ -48,10 +48,15 @@ const MENU = `<nav>
 <a href="/Musteri/Index">Kayıtlar</a><a href="/CariHesap/Index">Finans</a>
 <a href="/Account/LogOff">Çıkış</a></nav>`;
 
+// ضجيج لوحة حقيقية: مبدّل لغة وأزرار إجراءات، كلها تعود إلى الرئيسية
+const NOISE = `<a href="/setlang?culture=en&returnUrl=%2F">EN</a>
+<a href="/setlang?culture=ar&returnUrl=%2F">AR</a>
+<a href="/Sozlesme/Yeni">Yeni Kayıt</a><a href="/Arac/Delete/5">Sil</a>`;
+
 const tableHtml = (t) => `<table><thead><tr>${t.headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
 <tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 
-function startPanel() {
+function startPanel({ withActionLinks = false } = {}) {
   const pairs = new Map();
   const cookieOf = (req, name) =>
     (req.headers.cookie || '').split(';').map((s) => s.trim())
@@ -104,11 +109,18 @@ function startPanel() {
       return login(res);
     }
 
+    // مبدّل اللغة يعيد الزائر إلى الرئيسية — تماماً كاللوحة الحقيقية
+    if (url === '/setlang') {
+      res.writeHead(302, { Location: '/' });
+      return res.end();
+    }
+
     const key = url.split('/')[1];
+    const menu = MENU + (withActionLinks ? NOISE : '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(TABLES[key]
-      ? `<!doctype html><title>${key}</title>${MENU}${tableHtml(TABLES[key])}`
-      : `<!doctype html><title>Eganis Panel</title>${MENU}<h1>Hoş geldiniz</h1>`);
+      ? `<!doctype html><title>${key}</title>${menu}${tableHtml(TABLES[key])}`
+      : `<!doctype html><title>Eganis Panel</title>${menu}<h1>Hoş geldiniz</h1>`);
   });
 
   return new Promise((resolve) => {
@@ -231,4 +243,25 @@ test('التصفية بالحالة تبقى مطابقة تامّة', async (t)
   const driver = await driverFor(port);
   assert.equal((await driver.listContracts({ status: 'open' })).length, 2);
   assert.equal((await driver.listContracts({ status: 'closed' })).length, 0);
+});
+
+test('روابط تُغيّر شيئاً لا تُفحص ولا تُصنَّف صفحاتِ بيانات', async (t) => {
+  /*
+   * مبدّل اللغة ‎/setlang?culture=…‎ يعيد الزائر إلى الرئيسية بجدولها، فبدا
+   * صفحةَ بيانات وصُنّف كذلك — ثم يقلب لغة اللوحة عند كل قراءة فتتغيّر
+   * عناوين الأعمدة التركية التي نفهم الجداول بها.
+   */
+  const { server, port } = await startPanel({ withActionLinks: true });
+  t.after(() => server.close());
+
+  const driver = await driverFor(port);
+  const { found } = await driver.autodetect({});
+
+  for (const [kind, page] of Object.entries(found)) {
+    assert.doesNotMatch(page.href, /setlang|culture|logout|logoff|delete/i,
+      `${kind} اختار رابطاً ضاراً: ${page.href}`);
+  }
+  // والصفحات الحقيقية ما زالت تُكتشف رغم الضجيج
+  assert.equal(found.contracts?.href, '/Sozlesme/Index');
+  assert.equal(found.ledger?.href, '/CariHesap/Index');
 });
