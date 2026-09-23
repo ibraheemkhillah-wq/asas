@@ -124,12 +124,30 @@
       "Bash(git pull *)",
       "Bash(git checkout *)",
       "Bash(git show *)",
-      "Bash(git rev-parse*)"
+      "Bash(git rev-parse*)",
+      "Bash(git commit -m *)",
+      "Bash(git commit -q -m *)",
+      "Bash(git rm *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(touch *)",
+      "Bash(rm /tmp/claude-0/*)",
+      "Bash(node *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Artifact",
+      "Skill",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "SendUserFile",
+      "ToolSearch"
     ],
     "deny": [
       "Bash(rm -rf /*)",
       "Bash(rm -rf ~*)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "auto"
   }
 }
