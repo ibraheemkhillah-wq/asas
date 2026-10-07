@@ -10,3 +10,5 @@ data/
 config/eganis.json
 config/company.md
 .claude/settings.local.json
+__pycache__/
+*.pyc
