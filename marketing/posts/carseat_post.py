@@ -73,7 +73,7 @@ d.text((R_ - w_ar(hot, f1) - max(gap, 18), 1010), rest, font=f1, fill=WHITE+(255
 f3 = F(AR_BOLD, 31)
 d.text((R_, 1078), 'كرسي معتمد ومثبّت قبل ما تستلم السيارة', font=f3, fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
 
-# 6) rule + contacts (left) + slogan (right)
+# 6) rule + contacts
 d.line([(M, 1140), (R_, 1140)], fill=ORANGE+(150,), width=2)
 ic = load_icons(38); fc = F(CT_FONT, 34)
 for i, (keys, txt) in enumerate([(('ig','fb'), 'callrenttr'), (('wa','ph'), '+90 555 034 22 00')]):
@@ -81,8 +81,6 @@ for i, (keys, txt) in enumerate([(('ig','fb'), 'callrenttr'), (('wa','ph'), '+90
     for k in keys:
         canvas.alpha_composite(ic[k], (x, y-19)); x += 38+12
     d.text((x+8, y+2), txt, font=fc, fill=WHITE+(255,), anchor='lm', direction='ltr', language='en')
-fs = F(LT_REG, 25)
-d.text((R_, 1239), SLOGAN, font=fs, fill=ORANGE+(255,), anchor='rm', direction='ltr', language='en')
 
 canvas.convert('RGB').save(OUT, quality=95)
 print('ok', OUT)
