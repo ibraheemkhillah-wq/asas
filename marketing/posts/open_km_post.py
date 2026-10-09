@@ -61,7 +61,7 @@ d.line([(ex-70, 920), (ex, 920)], fill=ORANGE+(255,), width=3)
 
 d.text((R_, 1010), 'الطريق مفتوح...', font=F(AR_BLACK, 64), fill=WHITE+(255,), anchor='rs', direction='rtl', language='ar')
 d.text((R_, 1096), 'والكيلومترات كمان', font=F(AR_BLACK, 72), fill=ORANGE+(255,), anchor='rs', direction='rtl', language='ar')
-d.text((R_, 1150), 'سوق من اسطنبول لوين ما بدك، بدون حد للمسافة', font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
+d.text((R_, 1150), 'سوق بكل اسطنبول على راحتك، بدون حد للمسافة', font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
 
 d.line([(M, 1200), (R_, 1200)], fill=ORANGE+(140,), width=2)
 ic = load_icons(38); fc = F(CT_FONT, 32); y = 1262
