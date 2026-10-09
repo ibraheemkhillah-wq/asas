@@ -27,17 +27,39 @@ sc.alpha_composite(pl, (px0, py0))
 
 cv = sc.resize((W, H), Image.LANCZOS)
 
+# --- move the plane out from under the badge: lift it, refill the sky ---------
+import cv2
+arr = np.array(cv.convert('RGB'))
+bx0, by0, bx1, by1 = 745, 92, 970, 190            # plane box (canvas px)
+patch = arr[by0:by1, bx0:bx1].copy()
+m = np.zeros(arr.shape[:2], np.uint8); m[by0:by1, bx0:bx1] = 255
+arr = cv2.inpaint(arr, m, 7, cv2.INPAINT_TELEA)
+# plane mask = pixels brighter/redder than the local sky
+sky = cv2.GaussianBlur(arr[by0:by1, bx0:bx1].astype(np.float32), (0,0), 6)
+diff = np.abs(patch.astype(np.float32) - sky).sum(2)
+pm = np.clip((diff-14)/30, 0, 1)
+pm = cv2.GaussianBlur(pm, (0,0), 1.2)[..., None]
+nx, ny = 470, 150                                   # new top-left
+dst = arr[ny:ny+(by1-by0), nx:nx+(bx1-bx0)].astype(np.float32)
+arr[ny:ny+(by1-by0), nx:nx+(bx1-bx0)] = (dst*(1-pm) + patch*pm).astype(np.uint8)
+# --- lift exposure: brighter mids and shadows, keep highlights ----------------
+f = arr.astype(np.float32)/255
+f = f**0.82
+f = f + 0.035*(1-f)
+arr = np.clip(f*255, 0, 255).astype(np.uint8)
+cv = Image.fromarray(arr).convert('RGBA')
+
 # --- grade: deep navy floor for the type, soft top for the logo ---------------
 ys = np.arange(H, dtype=np.float32)
 def band(alpha_col, rgb):
     lay = Image.new('RGBA', (W, H), rgb+(0,))
     lay.putalpha(Image.fromarray((np.repeat(alpha_col[:, None], W, 1)*255).astype(np.uint8)))
     cv.alpha_composite(lay)
-band(np.clip((ys-780)/330, 0, 1)**1.15*0.88, (8, 24, 41))
-band(np.clip(1-ys/230, 0, 1)**1.6*0.55, (8, 24, 41))
+band(np.clip((ys-790)/320, 0, 1)**1.1*0.78, (8, 24, 41))
+band(np.clip(1-ys/200, 0, 1)**1.6*0.35, (8, 24, 41))
 # corner vignette
 yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-vg = np.clip(np.sqrt(((xx-W/2)/(W*0.75))**2 + ((yy-H*0.45)/(H*0.75))**2), 0, 1)**2.4*0.55
+vg = np.clip(np.sqrt(((xx-W/2)/(W*0.75))**2 + ((yy-H*0.45)/(H*0.75))**2), 0, 1)**2.4*0.32
 lay = Image.new('RGBA', (W, H), (4, 12, 22, 0)); lay.putalpha(Image.fromarray((vg*255).astype(np.uint8))); cv.alpha_composite(lay)
 
 d = ImageDraw.Draw(cv)
@@ -48,7 +70,7 @@ lw_ = lw_.resize((LW, round(LW*lw_.height/lw_.width)), Image.LANCZOS)
 cv.alpha_composite(lw_, (M-6, 40))
 
 fb = F(AR_BOLD, 26); bt = 'من خدماتنا'
-bw = w_ar(bt, fb) + 64; bh = 58; bx = R_ - bw; by = 44
+bw = w_ar(bt, fb) + 64; bh = 58; bx = R_ - bw; by = 46
 d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=LOGONAVY+(255,), outline=(255,255,255,70), width=1)
 d.polygon([(bx+1, by+bh-24), (bx+1, by+bh-1), (bx+24, by+bh-1)], fill=ORANGE+(255,))
 d.text((bx+bw/2, by+bh/2+2), bt, font=fb, fill=WHITE+(255,), anchor='mm', direction='rtl', language='ar')
