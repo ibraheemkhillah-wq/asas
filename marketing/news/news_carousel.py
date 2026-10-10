@@ -17,7 +17,12 @@ M = 64; R_ = W - M
 DEEP = (8, 24, 41)
 LIGHT = (244, 246, 249)
 THEME = 'dark'                      # set per story: 'dark' | 'light'
+SOURCE = None                       # set per story: shown on every slide
 def light(): return THEME == 'light'
+
+def source_line(d, x, y, anchor='rs'):
+    if SOURCE:
+        d.text((x, y), SOURCE, font=F(AR_BOLD, 26), fill=(INK_SOFT if light() else SOFT)+(255,), anchor=anchor, direction='rtl', language='ar')
 INK_SOFT = (84, 102, 124)
 NEWS_BADGE = 'أخبار السيارات'      # fixed: orange plate, navy type (services badge is the inverse)
 
@@ -111,7 +116,7 @@ def cover(sl, page, total):
     cv = bg(sl['bg']); grade(cv, 600, 0.90 if light() else 0.93); d = ImageDraw.Draw(cv)
     chrome(cv, d, page, total)
     # stacked headline plates, right-aligned, bottom-up
-    y = 1235
+    y = 1200 if SOURCE else 1235
     for txt, fill, ink, size in reversed(sl['stack']):
         while size > 30 and w_ar(txt, F(AR_BLACK, size)) > (R_-M) - 64: size -= 2
         f = F(AR_BLACK, size); h = round(size*1.62); w = w_ar(txt, f) + 64
@@ -121,6 +126,7 @@ def cover(sl, page, total):
             d.rectangle((R_-w, y-h, R_, y), fill=fill+(255,))
         d.text((R_-30, y-h/2+size*0.10), txt, font=f, fill=ink+(255,), anchor='rm', direction='rtl', language='ar')
         y -= h
+    source_line(d, R_, 1252)
     return cv
 
 def inner(sl, page, total):
@@ -130,7 +136,8 @@ def inner(sl, page, total):
     fb_ = F(CT_FONT, 40); blines, bsp = wrap(tokens(sl['body']), fb_, boxw - 2*pad); blh = 70
     bh = len(blines)*blh + 2*pad + 4
     extra = 0
-    if sl.get('source'):
+    src = sl.get('source', SOURCE)
+    if src:
         extra = 54
     btop = 1236 - bh - extra
     lay = Image.new('RGBA', (W, H), (0,0,0,0)); ld = ImageDraw.Draw(lay)
@@ -141,8 +148,8 @@ def inner(sl, page, total):
     cv.alpha_composite(lay)
     d = ImageDraw.Draw(cv)
     draw_lines(d, blines, bsp, fb_, R_-pad, btop+pad+44, blh, on_light=light())
-    if sl.get('source'):
-        d.text((R_-pad, btop+bh+extra-26), sl['source'], font=F(AR_BOLD, 26), fill=(INK_SOFT if light() else SOFT)+(255,), anchor='rs', direction='rtl', language='ar')
+    if src:
+        d.text((R_-pad, btop+bh+extra-26), src, font=F(AR_BOLD, 26), fill=(INK_SOFT if light() else SOFT)+(255,), anchor='rs', direction='rtl', language='ar')
     # title plate
     ts = 62                                   # keep the title on one line when it can stay readable
     while ts > 46 and len(wrap(tokens(sl['title']), F(AR_BLACK, ts), boxw - 2*pad)[0]) > 1: ts -= 2
@@ -216,7 +223,9 @@ def poll(sl, page, total):
             d.polygon([(cx-14, y0), (cx+14, y0), (cx, y0-18)], fill=icol+(255,))
         else:
             d.polygon([(cx-14, y0+ph), (cx+14, y0+ph), (cx, y0+ph+18)], fill=icol+(255,))
-    d.text((W/2, 1185), sl['cta'], font=F(AR_BLACK, 56), fill=ink+(255,), anchor='ms', direction='rtl', language='ar')
+    if sl.get('cta'):
+        d.text((W/2, 1185), sl['cta'], font=F(AR_BLACK, 56), fill=ink+(255,), anchor='ms', direction='rtl', language='ar')
+    source_line(d, W/2, 1245, anchor='ms')
     if sl.get('hint'):
         d.text((W/2, 1218), sl['hint'], font=F(AR_BOLD, 30), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
     return cv
@@ -227,6 +236,8 @@ def render(story_path, out):
     ns = dict(O=O, Wh=Wh, LOGONAVY=LOGONAVY)
     exec(open(story_path, encoding='utf-8').read(), ns)
     THEME = ns.get('THEME', 'dark')
+    global SOURCE
+    SOURCE = ns.get('SOURCE')
     os.makedirs(out, exist_ok=True)
     for i, sl in enumerate(ns['SLIDES'], 1):
         cv = {'cover': cover, 'inner': inner, 'poll': poll}[sl['kind']](sl, i, len(ns['SLIDES']))
