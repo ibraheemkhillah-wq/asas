@@ -172,8 +172,9 @@ def poll(sl, page, total):
         (icon_bolt if ic == 'bolt' else icon_drop)(d, x0+pw-50, y0+46, 42, icol)
         d.text((x0+pw-100, y0+ph/2+6), label, font=fl, fill=Wh+(255,), anchor='rm', direction='rtl', language='ar')
         d.polygon([(cx-14, y0), (cx+14, y0), (cx, y0-18)], fill=icol+(255,))
-    d.text((W/2, 1160), sl['cta'], font=F(AR_BLACK, 56), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
-    d.text((W/2, 1218), sl['hint'], font=F(AR_BOLD, 30), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
+    d.text((W/2, 1185), sl['cta'], font=F(AR_BLACK, 56), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    if sl.get('hint'):
+        d.text((W/2, 1218), sl['hint'], font=F(AR_BOLD, 30), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
     return cv
 
 NB = ' '
@@ -197,7 +198,7 @@ SLIDES = [
                ('سعر الشراء الأولي،', O), ('وليس فقط في تكلفة التشغيل والملكية.', Wh)]),
     dict(kind='poll', bg='bmw-5-poll.jpg', chip='شاركنا رأيك', q1='لو الفرق 4,400 دولار...', q2='شو بتختار؟',
          options=[('كهربائية', 'bolt', O, 815), ('بنزين', 'drop', Wh, 262)], tag_y=950,
-         cta='جاوبنا بالتعليقات', hint='اكتب: كهربائية أو بنزين'),
+         cta='جاوبنا بالتعليقات'),
 ]
 
 os.makedirs(OUT, exist_ok=True)
