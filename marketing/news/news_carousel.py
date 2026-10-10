@@ -92,39 +92,40 @@ def cover(sl, page, total):
     cv = bg(sl['bg']); grade(cv, 600, 0.93); d = ImageDraw.Draw(cv)
     chrome(cv, d, page, total)
     # stacked headline plates, right-aligned, bottom-up
-    y = 1225
+    y = 1235
     for txt, fill, ink, size in reversed(sl['stack']):
-        f = F(AR_BLACK, size); h = round(size*1.62); w = w_ar(txt, f) + 60
+        while size > 30 and w_ar(txt, F(AR_BLACK, size)) > (R_-M) - 64: size -= 2
+        f = F(AR_BLACK, size); h = round(size*1.62); w = w_ar(txt, f) + 64
         d.rectangle((R_-w, y-h, R_, y), fill=fill+(255,))
         d.text((R_-30, y-h/2+size*0.10), txt, font=f, fill=ink+(255,), anchor='rm', direction='rtl', language='ar')
         y -= h
     return cv
 
 def inner(sl, page, total):
-    cv = bg(sl['bg']); grade(cv, 560, 0.93); d = ImageDraw.Draw(cv)
+    cv = bg(sl['bg']); grade(cv, 480, 0.94); d = ImageDraw.Draw(cv)
     chrome(cv, d, page, total)
     pad = 34; boxw = R_ - M
-    fb_ = F(CT_FONT, 31); blines, bsp = wrap(tokens(sl['body']), fb_, boxw - 2*pad); blh = 56
-    bh = len(blines)*blh + 2*pad - 6
+    fb_ = F(CT_FONT, 40); blines, bsp = wrap(tokens(sl['body']), fb_, boxw - 2*pad); blh = 70
+    bh = len(blines)*blh + 2*pad + 4
     extra = 0
     if sl.get('source'):
-        extra = 44
+        extra = 54
     btop = 1236 - bh - extra
     lay = Image.new('RGBA', (W, H), (0,0,0,0)); ld = ImageDraw.Draw(lay)
     ld.rectangle((M, btop, R_, btop+bh+extra), fill=DEEP+(225,), outline=(255,255,255,46), width=1)
     cv.alpha_composite(lay)
-    draw_lines(d, blines, bsp, fb_, R_-pad, btop+pad+34, blh)
+    draw_lines(d, blines, bsp, fb_, R_-pad, btop+pad+44, blh)
     if sl.get('source'):
-        d.text((R_-pad, btop+bh+extra-26), sl['source'], font=F(AR_BOLD, 22), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
+        d.text((R_-pad, btop+bh+extra-26), sl['source'], font=F(AR_BOLD, 26), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
     # title plate
-    ft = F(AR_BLACK, 46); tlines, tsp = wrap(tokens(sl['title']), ft, boxw - 2*pad); tlh = 74
-    th = len(tlines)*tlh + 34
+    ft = F(AR_BLACK, 62); tlines, tsp = wrap(tokens(sl['title']), ft, boxw - 2*pad); tlh = 96
+    th = len(tlines)*tlh + 40
     ttop = btop - 14 - th
     d.rectangle((M, ttop, R_, ttop+th), fill=LOGONAVY+(255,))
     d.rectangle((R_-8, ttop, R_, ttop+th), fill=O+(255,))
-    draw_lines(d, tlines, tsp, ft, R_-pad, ttop+17+52, tlh)
+    draw_lines(d, tlines, tsp, ft, R_-pad, ttop+20+70, tlh)
     # eyebrow chip
-    fe = F(AR_BOLD, 24); ew = w_ar(sl['chip'], fe) + 36; eh = 46
+    fe = F(AR_BOLD, 30); ew = w_ar(sl['chip'], fe) + 44; eh = 56
     d.rectangle((R_-ew, ttop-14-eh, R_, ttop-14), fill=O+(255,))
     d.text((R_-ew/2, ttop-14-eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
     return cv
@@ -151,34 +152,36 @@ def icon_drop(d, cx, cy, s, col):
     d.polygon([(cx, cy-s*0.5), (cx-r*0.97, cy+s*0.5-r*1.15), (cx+r*0.97, cy+s*0.5-r*1.15)], fill=col+(255,))
 
 def poll(sl, page, total):
-    cv = field(); d = ImageDraw.Draw(cv)
+    cv = bg(sl['bg'])
+    ys = np.arange(H, dtype=np.float32)
+    for a_, rgb in ((np.clip(1-(ys-120)/560, 0, 1)**1.2*0.88, DEEP), (np.clip((ys-900)/300, 0, 1)*0.9, DEEP)):
+        lay = Image.new('RGBA', (W, H), rgb+(0,))
+        lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8))); cv.alpha_composite(lay)
+    d = ImageDraw.Draw(cv)
     chrome(cv, d, page, total)
-    fe = F(AR_BOLD, 26); ew = w_ar(sl['chip'], fe) + 44; eh = 52
-    d.rectangle((W/2-ew/2, 250, W/2+ew/2, 250+eh), fill=O+(255,))
-    d.text((W/2, 250+eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
-    d.text((W/2, 410), sl['q1'], font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
-    d.text((W/2, 530), sl['q2'], font=F(AR_BLACK, 86), fill=O+(255,), anchor='ms', direction='rtl', language='ar')
-    cw, ch, gap, top = 400, 330, 40, 610
-    for i, (label, hint, ic, icol) in enumerate(sl['options']):          # first option on the right (RTL)
-        x1 = W/2 + gap/2 + cw if i == 0 else W/2 - gap/2
-        x0 = x1 - cw
-        d.rounded_rectangle((x0, top, x1, top+ch), radius=18, fill=LOGONAVY+(255,), outline=(255,255,255,60), width=2)
-        d.ellipse((x0+cw/2-62, top+40, x0+cw/2+62, top+164), fill=DEEP+(255,), outline=icol+(255,), width=3)
-        (icon_bolt if ic == 'bolt' else icon_drop)(d, x0+cw/2, top+102, 74, icol)
-        d.text((x0+cw/2, top+238), label, font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
-        d.text((x0+cw/2, top+292), hint, font=F(AR_BOLD, 24), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
-    d.text((W/2, 1050), sl['cta'], font=F(AR_BLACK, 44), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
-    ay = 1078
-    d.polygon([(W/2-16, ay), (W/2+16, ay), (W/2, ay+20)], fill=O+(255,))
-    d.text((W/2, 1170), sl['sub'], font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
+    fe = F(AR_BOLD, 30); ew = w_ar(sl['chip'], fe) + 48; eh = 58
+    d.rectangle((W/2-ew/2, 210, W/2+ew/2, 210+eh), fill=O+(255,))
+    d.text((W/2, 210+eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
+    d.text((W/2, 380), sl['q1'], font=F(AR_BLACK, 62), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    d.text((W/2, 520), sl['q2'], font=F(AR_BLACK, 112), fill=O+(255,), anchor='ms', direction='rtl', language='ar')
+    for label, ic, icol, cx in sl['options']:          # each tag sits above its car
+        fl = F(AR_BLACK, 44); pw = w_ar(label, fl) + 150; ph = 92; y0 = sl.get('tag_y', 600)
+        x0 = cx - pw/2
+        d.rounded_rectangle((x0, y0, x0+pw, y0+ph), radius=46, fill=LOGONAVY+(235,), outline=icol+(255,), width=3)
+        d.ellipse((x0+pw-84, y0+12, x0+pw-16, y0+80), fill=DEEP+(255,), outline=icol+(255,), width=2)
+        (icon_bolt if ic == 'bolt' else icon_drop)(d, x0+pw-50, y0+46, 42, icol)
+        d.text((x0+pw-100, y0+ph/2+6), label, font=fl, fill=Wh+(255,), anchor='rm', direction='rtl', language='ar')
+        d.polygon([(cx-14, y0), (cx+14, y0), (cx, y0-18)], fill=icol+(255,))
+    d.text((W/2, 1160), sl['cta'], font=F(AR_BLACK, 56), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    d.text((W/2, 1218), sl['hint'], font=F(AR_BOLD, 30), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
     return cv
 
 NB = ' '
 SLIDES = [
     dict(kind='cover', bg='bmw-1-cover.jpg', stack=[
-        ('بي إم دبليو الفئة الثالثة 2027', LOGONAVY, Wh, 46),
-        ('الكهربائية أرخص من البنزين', Wh, LOGONAVY, 56),
-        ('بفارق 4,400 دولار', O, LOGONAVY, 50)]),
+        ('بي إم دبليو الفئة الثالثة 2027', LOGONAVY, Wh, 60),
+        ('الكهربائية أرخص من البنزين', Wh, LOGONAVY, 80),
+        ('بفارق 4,400 دولار', O, LOGONAVY, 72)]),
     dict(kind='inner', bg='bmw-2-prices.jpg', chip='الأسعار',
          title=[('الكهربائية أرخص بفارق', Wh), ('4,400 دولار', O)],
          body=[('تبدأ نسخة', Wh), (f'i3{NB}50{NB}xDrive', O), ('الكهربائية من', Wh), ('61,500 دولار،', O),
@@ -192,9 +195,9 @@ SLIDES = [
          title=[('الكهربائية', Wh), ('تنافس البنزين', O), ('بالسعر', Wh)],
          body=[('تعتمد النسختان على منصتين مختلفتين. ويأتي ذلك مع استمرار انخفاض أسعار السيارات الكهربائية واقترابها من منافسة البنزين في', Wh),
                ('سعر الشراء الأولي،', O), ('وليس فقط في تكلفة التشغيل والملكية.', Wh)]),
-    dict(kind='poll', chip='شاركنا رأيك', q1='لو الفرق 4,400 دولار...', q2='شو بتختار؟',
-         options=[('كهربائية', 'اكتب: كهربائية', 'bolt', O), ('بنزين', 'اكتب: بنزين', 'drop', Wh)],
-         cta='جاوبنا بالتعليقات', sub='وبزيارتك الجاية لاسطنبول، بتأجر كهربائية؟'),
+    dict(kind='poll', bg='bmw-5-poll.jpg', chip='شاركنا رأيك', q1='لو الفرق 4,400 دولار...', q2='شو بتختار؟',
+         options=[('كهربائية', 'bolt', O, 815), ('بنزين', 'drop', Wh, 262)], tag_y=950,
+         cta='جاوبنا بالتعليقات', hint='اكتب: كهربائية أو بنزين'),
 ]
 
 os.makedirs(OUT, exist_ok=True)
