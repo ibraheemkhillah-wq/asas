@@ -129,6 +129,50 @@ def inner(sl, page, total):
     d.text((R_-ew/2, ttop-14-eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
     return cv
 
+
+def field():
+    """Graded brand navy, as on the approved end card."""
+    ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
+    KEY = np.array([46,104,150], np.float32); DK = np.array(DEEP, np.float32)
+    RL = np.sqrt(((xs-W/2)/1.3)**2 + ((ys-H*0.46)/1.0)**2)/900
+    bgc = DK + (KEY-DK)*np.exp(-0.5*(RL/0.48)**2)[..., None]
+    R = np.sqrt((xs-W/2)**2 + (ys-H/2)**2)/900
+    bgc = bgc*(1-0.32*np.clip(R, 0, 1)**2.3)[..., None]
+    bgc = np.clip(bgc + np.random.default_rng(7).normal(0, 2.0, (H, W, 1)), 0, 255).astype(np.uint8)
+    return Image.fromarray(bgc).convert('RGBA')
+
+def icon_bolt(d, cx, cy, s, col):
+    p = [(0.12,-0.5),(-0.28,0.06),(-0.02,0.06),(-0.14,0.5),(0.28,-0.08),(0.02,-0.08)]
+    d.polygon([(cx+x*s, cy+y*s) for x, y in p], fill=col+(255,))
+
+def icon_drop(d, cx, cy, s, col):
+    r = s*0.30
+    d.ellipse((cx-r, cy+s*0.5-2*r, cx+r, cy+s*0.5), fill=col+(255,))
+    d.polygon([(cx, cy-s*0.5), (cx-r*0.97, cy+s*0.5-r*1.15), (cx+r*0.97, cy+s*0.5-r*1.15)], fill=col+(255,))
+
+def poll(sl, page, total):
+    cv = field(); d = ImageDraw.Draw(cv)
+    chrome(cv, d, page, total)
+    fe = F(AR_BOLD, 26); ew = w_ar(sl['chip'], fe) + 44; eh = 52
+    d.rectangle((W/2-ew/2, 250, W/2+ew/2, 250+eh), fill=O+(255,))
+    d.text((W/2, 250+eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
+    d.text((W/2, 410), sl['q1'], font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    d.text((W/2, 530), sl['q2'], font=F(AR_BLACK, 86), fill=O+(255,), anchor='ms', direction='rtl', language='ar')
+    cw, ch, gap, top = 400, 330, 40, 610
+    for i, (label, hint, ic, icol) in enumerate(sl['options']):          # first option on the right (RTL)
+        x1 = W/2 + gap/2 + cw if i == 0 else W/2 - gap/2
+        x0 = x1 - cw
+        d.rounded_rectangle((x0, top, x1, top+ch), radius=18, fill=LOGONAVY+(255,), outline=(255,255,255,60), width=2)
+        d.ellipse((x0+cw/2-62, top+40, x0+cw/2+62, top+164), fill=DEEP+(255,), outline=icol+(255,), width=3)
+        (icon_bolt if ic == 'bolt' else icon_drop)(d, x0+cw/2, top+102, 74, icol)
+        d.text((x0+cw/2, top+238), label, font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+        d.text((x0+cw/2, top+292), hint, font=F(AR_BOLD, 24), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
+    d.text((W/2, 1050), sl['cta'], font=F(AR_BLACK, 44), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    ay = 1078
+    d.polygon([(W/2-16, ay), (W/2+16, ay), (W/2, ay+20)], fill=O+(255,))
+    d.text((W/2, 1170), sl['sub'], font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
+    return cv
+
 NB = ' '
 SLIDES = [
     dict(kind='cover', bg='bmw-1-cover.jpg', stack=[
@@ -148,9 +192,12 @@ SLIDES = [
          title=[('الكهربائية', Wh), ('تنافس البنزين', O), ('بالسعر', Wh)],
          body=[('تعتمد النسختان على منصتين مختلفتين. ويأتي ذلك مع استمرار انخفاض أسعار السيارات الكهربائية واقترابها من منافسة البنزين في', Wh),
                ('سعر الشراء الأولي،', O), ('وليس فقط في تكلفة التشغيل والملكية.', Wh)]),
+    dict(kind='poll', chip='شاركنا رأيك', q1='لو الفرق 4,400 دولار...', q2='شو بتختار؟',
+         options=[('كهربائية', 'اكتب: كهربائية', 'bolt', O), ('بنزين', 'اكتب: بنزين', 'drop', Wh)],
+         cta='جاوبنا بالتعليقات', sub='وبزيارتك الجاية لاسطنبول، بتأجر كهربائية؟'),
 ]
 
 os.makedirs(OUT, exist_ok=True)
 for i, sl in enumerate(SLIDES, 1):
-    cv = (cover if sl['kind'] == 'cover' else inner)(sl, i, len(SLIDES))
+    cv = {'cover': cover, 'inner': inner, 'poll': poll}[sl['kind']](sl, i, len(SLIDES))
     p = os.path.join(OUT, f'bmw-3series-{i}.png'); cv.convert('RGB').save(p, quality=95); print(p)
