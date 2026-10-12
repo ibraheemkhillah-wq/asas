@@ -5,6 +5,7 @@ NAME = "idea-first-hatchback"
 SECTION = "idea"
 THEME = "dark"
 SLIDES = [
-    dict(kind='idea', bg='idea-first-hatchback-real.jpg', top=310, size=104,
+    dict(kind='idea', bg='idea-first-hatchback-real2.jpg', top=310, size=104,
+         credit='Photo: Andrew Bone · CC BY 2.0',
          lines=[('أول هاتشباك', Wh), ('في العالم', O)]),
 ]

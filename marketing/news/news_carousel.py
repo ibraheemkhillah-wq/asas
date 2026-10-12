@@ -269,6 +269,8 @@ def idea(sl, page, total):
         d.text((W/2, y), txt, font=F(AR_BLACK, size), fill=col+(255,), anchor='ms', direction='rtl', language='ar')
         y += round(size*1.45)
     d.rectangle((W/2-60, y-round(size*1.45)+42, W/2+60, y-round(size*1.45)+50), fill=O+(255,))
+    if sl.get('credit'):                                   # photo credit when the licence asks for one
+        d.text((R_, 1294), sl['credit'], font=F(LT_TEXT, 20), fill=SOFT+(255,), anchor='rm', direction='ltr', language='en')
     return cv
 
 def render(story_path, out):
