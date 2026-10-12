@@ -25,7 +25,8 @@ def source_line(d, x, y, anchor='rs'):
         d.text((x, y), SOURCE, font=F(AR_BOLD, 26), fill=(INK_SOFT if light() else SOFT)+(255,), anchor=anchor, direction='rtl', language='ar')
 INK_SOFT = (84, 102, 124)
 NEWS_BADGE = 'أخبار السيارات'      # fixed: orange plate, navy type (services badge is the inverse)
-IDEA_BADGE = 'فكرة'                 # fixed: white plate, navy type, bulb icon, orange corner
+IDEA_BADGE = 'عندك فكرة'            # fixed: brand steel-blue plate, white type, orange corner
+IDEA_BLUE = (46, 104, 150)          # #2E6896, the key light of the brand's navy backdrop
 SECTION = 'news'                    # set per story: 'news' | 'idea'
 
 O, Wh = ORANGE, WHITE
@@ -94,11 +95,10 @@ def icon_bulb(d, cx, cy, s, col):
 def badge(d):
     fb = F(AR_BOLD, 26); bh = 58; by = 50
     if SECTION == 'idea':
-        bw = w_ar(IDEA_BADGE, fb) + 64 + 40; bx = R_ - bw
-        d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=Wh+(255,))
+        bw = w_ar(IDEA_BADGE, fb) + 64; bx = R_ - bw
+        d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=IDEA_BLUE+(255,))
         d.polygon([(bx, by+bh-22), (bx, by+bh), (bx+22, by+bh)], fill=O+(255,))
-        icon_bulb(d, R_-34, by+bh/2-2, 40, O)
-        d.text((R_-60, by+bh/2+2), IDEA_BADGE, font=fb, fill=LOGONAVY+(255,), anchor='rm', direction='rtl', language='ar')
+        d.text((bx+bw/2, by+bh/2+2), IDEA_BADGE, font=fb, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
     else:
         bw = w_ar(NEWS_BADGE, fb) + 64; bx = R_ - bw
         d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=O+(255,))
