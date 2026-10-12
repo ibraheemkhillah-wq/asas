@@ -25,6 +25,8 @@ def source_line(d, x, y, anchor='rs'):
         d.text((x, y), SOURCE, font=F(AR_BOLD, 26), fill=(INK_SOFT if light() else SOFT)+(255,), anchor=anchor, direction='rtl', language='ar')
 INK_SOFT = (84, 102, 124)
 NEWS_BADGE = 'أخبار السيارات'      # fixed: orange plate, navy type (services badge is the inverse)
+IDEA_BADGE = 'فكرة'                 # fixed: white plate, navy type, bulb icon, orange corner
+SECTION = 'news'                    # set per story: 'news' | 'idea'
 
 O, Wh = ORANGE, WHITE
 _m = ImageDraw.Draw(Image.new('RGB', (8, 8)))
@@ -81,14 +83,32 @@ def grade(cv, start, strength):
     band(np.clip((ys-start)/(H-start-120), 0, 1)**1.05*strength, tone)
     band(np.clip(1-ys/220, 0, 1)**1.5*(0.55 if light() else 0.45), tone)
 
+def icon_bulb(d, cx, cy, s, col):
+    r = s*0.30
+    d.ellipse((cx-r, cy-s*0.5, cx+r, cy-s*0.5+2*r), fill=col+(255,))
+    d.polygon([(cx-r*0.62, cy-s*0.5+r*1.7), (cx+r*0.62, cy-s*0.5+r*1.7), (cx+r*0.42, cy+s*0.22), (cx-r*0.42, cy+s*0.22)], fill=col+(255,))
+    for k in (0, 1):
+        yy = cy+s*0.27+k*s*0.11
+        d.rounded_rectangle((cx-r*0.42, yy, cx+r*0.42, yy+s*0.07), radius=2, fill=col+(255,))
+
+def badge(d):
+    fb = F(AR_BOLD, 26); bh = 58; by = 50
+    if SECTION == 'idea':
+        bw = w_ar(IDEA_BADGE, fb) + 64 + 40; bx = R_ - bw
+        d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=Wh+(255,))
+        d.polygon([(bx, by+bh-22), (bx, by+bh), (bx+22, by+bh)], fill=O+(255,))
+        icon_bulb(d, R_-34, by+bh/2-2, 40, O)
+        d.text((R_-60, by+bh/2+2), IDEA_BADGE, font=fb, fill=LOGONAVY+(255,), anchor='rm', direction='rtl', language='ar')
+    else:
+        bw = w_ar(NEWS_BADGE, fb) + 64; bx = R_ - bw
+        d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=O+(255,))
+        d.polygon([(bx, by+bh-22), (bx, by+bh), (bx+22, by+bh)], fill=LOGONAVY+(255,))
+        d.text((bx+bw/2, by+bh/2+2), NEWS_BADGE, font=fb, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
+
 def chrome(cv, d, page, total):
     lg = Image.open(LOGO_NAVY if light() else LOGO_WHITE).convert('RGBA'); LW = 270
     cv.alpha_composite(lg.resize((LW, round(LW*lg.height/lg.width)), Image.LANCZOS), (M-6, 46))
-    fb = F(AR_BOLD, 26)
-    bw = w_ar(NEWS_BADGE, fb) + 64; bh = 58; bx = R_ - bw; by = 50
-    d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=O+(255,))
-    d.polygon([(bx, by+bh-22), (bx, by+bh), (bx+22, by+bh)], fill=LOGONAVY+(255,))
-    d.text((bx+bw/2, by+bh/2+2), NEWS_BADGE, font=fb, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
+    badge(d)
     ink = LOGONAVY if light() else Wh
     ic = load_icons(34); fc = F(CT_FONT, 29); y = 1292; x = M
     for k in ('ig', 'fb'):
@@ -99,6 +119,8 @@ def chrome(cv, d, page, total):
             im = Image.fromarray(arr.astype(np.uint8), 'RGBA')
         cv.alpha_composite(im, (x, y-17)); x += 34+10
     d.text((x+6, y+2), 'callrenttr', font=fc, fill=ink+(255,), anchor='lm', direction='ltr', language='en')
+    if total == 1:
+        return
     fp = F(LT_TEXT, 24)
     d.text((R_, y+2), f'{page:02d} / {total:02d}', font=fp, fill=(INK_SOFT if light() else SOFT)+(255,), anchor='rm', direction='ltr', language='en')
     if page < total:
@@ -231,6 +253,24 @@ def poll(sl, page, total):
     return cv
 
 
+def idea(sl, page, total):
+    """Single image, one question. Headline sits in the calm top of the photo."""
+    cv = bg(sl['bg'])
+    ys = np.arange(H, dtype=np.float32)
+    for a_ in (np.clip(1-(ys-80)/620, 0, 1)**1.3*0.80, np.clip((ys-1130)/220, 0, 1)*0.85):
+        lay = Image.new('RGBA', (W, H), DEEP+(0,))
+        lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8))); cv.alpha_composite(lay)
+    d = ImageDraw.Draw(cv)
+    chrome(cv, d, page, total)
+    y = sl.get('top', 300)
+    for txt, col in sl['lines']:
+        size = sl.get('size', 92)
+        while w_ar(txt, F(AR_BLACK, size)) > W - 2*M: size -= 2
+        d.text((W/2, y), txt, font=F(AR_BLACK, size), fill=col+(255,), anchor='ms', direction='rtl', language='ar')
+        y += round(size*1.45)
+    d.rectangle((W/2-60, y-round(size*1.45)+42, W/2+60, y-round(size*1.45)+50), fill=O+(255,))
+    return cv
+
 def render(story_path, out):
     global THEME
     ns = dict(O=O, Wh=Wh, LOGONAVY=LOGONAVY)
@@ -238,9 +278,11 @@ def render(story_path, out):
     THEME = ns.get('THEME', 'dark')
     global SOURCE
     SOURCE = ns.get('SOURCE')
+    global SECTION
+    SECTION = ns.get('SECTION', 'news')
     os.makedirs(out, exist_ok=True)
     for i, sl in enumerate(ns['SLIDES'], 1):
-        cv = {'cover': cover, 'inner': inner, 'poll': poll}[sl['kind']](sl, i, len(ns['SLIDES']))
+        cv = {'cover': cover, 'inner': inner, 'poll': poll, 'idea': idea}[sl['kind']](sl, i, len(ns['SLIDES']))
         p = os.path.join(out, f"{ns['NAME']}-{i}.png"); cv.convert('RGB').save(p, quality=95); print(p)
 
 if __name__ == '__main__':
