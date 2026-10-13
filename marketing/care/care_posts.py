@@ -51,7 +51,9 @@ def oil(out):
     shade(cv, [lambda ys: np.clip(1-ys/760, 0, 1)**1.2*0.55, lambda ys: (ys-1050)/220*0.9])
     d = ImageDraw.Draw(cv)
     nc.chrome(cv, d, 1, 1)
-    d.text((W/2, 236), 'ماذا يعني الرقم على عبوة الزيت؟', font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    head = 'ماذا يعني الرقم على عبوة زيت المحرك؟'; hs = 50
+    while w_ar(head, F(AR_BLACK, hs)) > W - 2*M: hs -= 2
+    d.text((W/2, 236), head, font=F(AR_BLACK, hs), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
     code = F(LT_TEXT, 210); txt = '5W-30'
     tw = code.getlength(txt); x0 = W/2 - tw/2; base = 448
     d.text((x0, base), txt, font=code, fill=O+(255,), anchor='ls')
