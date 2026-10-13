@@ -77,7 +77,7 @@ def oil(out):
         d.rectangle((cx0, top, cx0+cw, top+6), fill=O+(255,))
         d.text((ccx, top+70), key, font=F(LT_TEXT, 50), fill=O+(255,), anchor='ms')
         centered_lines(d, body, F(CT_FONT, 30), ccx, top+128, cw-30, 46)
-    tip_bar(cv, d, 1104, [('لا تعتمد على التخمين:', O), ('استخدم دائماً الزيت الموصى به في دليل سيارتك', Wh)], TEAL)
+    tip_bar(cv, d, 1046, [('لا تعتمد على التخمين:', O), ('استخدم دائماً الزيت الموصى به في دليل سيارتك', Wh)], TEAL)
     cv.convert('RGB').save(out, quality=95); print(out)
 
 
