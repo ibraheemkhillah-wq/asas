@@ -27,7 +27,11 @@ INK_SOFT = (84, 102, 124)
 NEWS_BADGE = 'أخبار السيارات'      # fixed: orange plate, navy type (services badge is the inverse)
 IDEA_BADGE = 'عندك فكرة'            # fixed: brand steel-blue plate, white type, orange corner
 IDEA_BLUE = (46, 104, 150)          # #2E6896, the key light of the brand's navy backdrop
-SECTION = 'news'                    # set per story: 'news' | 'idea'
+CARE_BADGE = 'اعتنِ بسيارتك'        # fixed: teal plate, white type, orange corner
+CARE_TEAL = (22, 138, 128)          # #168A80
+OFFER_BADGE = 'وفّر معنا'           # fixed: crimson plate, white type, navy corner
+OFFER_RED = (200, 30, 45)           # #C81E2D
+SECTION = 'news'                    # set per story: 'news' | 'idea' | 'care' | 'offer'
 
 O, Wh = ORANGE, WHITE
 _m = ImageDraw.Draw(Image.new('RGB', (8, 8)))
@@ -94,11 +98,13 @@ def icon_bulb(d, cx, cy, s, col):
 
 def badge(d):
     fb = F(AR_BOLD, 26); bh = 58; by = 50
-    if SECTION == 'idea':
-        bw = w_ar(IDEA_BADGE, fb) + 64; bx = R_ - bw
-        d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=IDEA_BLUE+(255,))
-        d.polygon([(bx, by+bh-22), (bx, by+bh), (bx+22, by+bh)], fill=O+(255,))
-        d.text((bx+bw/2, by+bh/2+2), IDEA_BADGE, font=fb, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
+    plates = {'idea': (IDEA_BADGE, IDEA_BLUE, O), 'care': (CARE_BADGE, CARE_TEAL, O), 'offer': (OFFER_BADGE, OFFER_RED, LOGONAVY)}
+    if SECTION in plates:
+        label, plate, corner = plates[SECTION]
+        bw = w_ar(label, fb) + 64; bx = R_ - bw
+        d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=plate+(255,))
+        d.polygon([(bx, by+bh-22), (bx, by+bh), (bx+22, by+bh)], fill=corner+(255,))
+        d.text((bx+bw/2, by+bh/2+2), label, font=fb, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
     else:
         bw = w_ar(NEWS_BADGE, fb) + 64; bx = R_ - bw
         d.rounded_rectangle((bx, by, bx+bw, by+bh), radius=6, fill=O+(255,))
