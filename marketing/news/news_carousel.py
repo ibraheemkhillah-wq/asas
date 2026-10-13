@@ -7,7 +7,7 @@ import sys, os
 KIT = sys.argv[1] if __name__ == '__main__' else os.environ.get('CALLRENT_KIT', '')
 sys.path.insert(0, KIT)
 HERE = os.path.dirname(os.path.abspath(__file__))
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
 from brand import (ORANGE, LOGONAVY, WHITE, SOFT, F, AR_BLACK, AR_BOLD, CT_FONT, LT_TEXT,
                    LOGO_WHITE, LOGO_NAVY, load_icons, w_ar, w_lt)
@@ -149,6 +149,10 @@ def cover(sl, page, total):
         d.text((R_-30, y-h/2+size*0.10), txt, font=f, fill=ink+(255,), anchor='rm', direction='rtl', language='ar')
         y -= h
     source_line(d, R_, 1252)
+    if sl.get('mark'):                                   # maker's wordmark, white, under the badge
+        mk = Image.open(os.path.join(HERE, sl['mark'])).convert('RGBA'); mw = sl.get('mark_w', 240)
+        mk = mk.resize((mw, round(mw*mk.height/mk.width)), Image.LANCZOS)
+        cv.alpha_composite(mk, (R_-mw, 136))
     return cv
 
 def inner(sl, page, total):
@@ -215,13 +219,21 @@ def icon_plug(d, cx, cy, s, col):
         d.rectangle((cx+dx-s*0.05, cy-h/2-s*0.22, cx+dx+s*0.05, cy-h/2), fill=col+(255,))
     d.rectangle((cx-s*0.06, cy+h/2, cx+s*0.06, cy+h/2+s*0.22), fill=col+(255,))
 
-ICONS = {'bolt': icon_bolt, 'drop': icon_drop, 'plug': icon_plug}
+def icon_check(d, cx, cy, s, col):
+    d.line([(cx-s*0.32, cy+s*0.02), (cx-s*0.08, cy+s*0.26), (cx+s*0.34, cy-s*0.24)], fill=col+(255,), width=round(s*0.15), joint='curve')
+
+def icon_x(d, cx, cy, s, col):
+    k = s*0.26; w = round(s*0.15)
+    d.line([(cx-k, cy-k), (cx+k, cy+k)], fill=col+(255,), width=w)
+    d.line([(cx-k, cy+k), (cx+k, cy-k)], fill=col+(255,), width=w)
+
+ICONS = {'bolt': icon_bolt, 'drop': icon_drop, 'plug': icon_plug, 'check': icon_check, 'x': icon_x}
 
 def poll(sl, page, total):
     cv = bg(sl['bg'])
     ys = np.arange(H, dtype=np.float32)
     tone = LIGHT if light() else DEEP
-    for a_, rgb in ((np.clip(1-(ys-120)/560, 0, 1)**1.2*0.88, tone), (np.clip((ys-900)/300, 0, 1)*0.9, tone)):
+    for a_, rgb in ((np.clip(1-(ys-120)/560, 0, 1)**1.2*0.88, tone), (np.clip((ys-sl.get('fade_from', 900))/300, 0, 1)*0.9, tone)):
         lay = Image.new('RGBA', (W, H), rgb+(0,))
         lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8))); cv.alpha_composite(lay)
     d = ImageDraw.Draw(cv)
@@ -252,6 +264,35 @@ def poll(sl, page, total):
         d.text((W/2, 1218), sl['hint'], font=F(AR_BOLD, 30), fill=SOFT+(255,), anchor='ms', direction='rtl', language='ar')
     return cv
 
+
+def stats(sl, page, total):
+    """One big total, then a ranked bar per market."""
+    cv = bg(sl['bg']).filter(ImageFilter.GaussianBlur(9))      # backdrop only: keep the figures clean
+    cv = Image.blend(cv, Image.new('RGBA', (W, H), DEEP+(255,)), 0.5); grade(cv, 260, 0.96); d = ImageDraw.Draw(cv)
+    chrome(cv, d, page, total)
+    fe = F(AR_BOLD, 30); ew = w_ar(sl['chip'], fe) + 44; eh = 56; ey = 250
+    d.rectangle((R_-ew, ey, R_, ey+eh), fill=O+(255,))
+    d.text((R_-ew/2, ey+eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
+    fbig = F(LT_TEXT, 150)
+    d.text((R_, ey+eh+170), sl['total'], font=fbig, fill=O+(255,), anchor='rs', direction='ltr', language='en')
+    d.text((R_, ey+eh+250), sl['total_label'], font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
+    top = ey+eh+300; rh = 124; pad = 34
+    lay = Image.new('RGBA', (W, H), (0,0,0,0)); ld = ImageDraw.Draw(lay)
+    ld.rectangle((M, top, R_, top+len(sl['rows'])*rh+2*pad-20), fill=DEEP+(225,), outline=(255,255,255,46), width=1)
+    cv.alpha_composite(lay); d = ImageDraw.Draw(cv)
+    d.rectangle((R_-8, top, R_, top+len(sl['rows'])*rh+2*pad-20), fill=O+(255,))
+    mx = max(v for _, _, v in sl['rows'])
+    for i, (name, num, v) in enumerate(sl['rows']):
+        y = top + pad + i*rh
+        d.text((R_-pad, y+44), name, font=F(AR_BLACK, 42), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
+        d.text((M+pad, y+44), num, font=F(LT_TEXT, 46), fill=(O if i == 0 else Wh)+(255,), anchor='ls', direction='ltr', language='en')
+        bx0, bx1, by = M+pad, R_-pad, y+66
+        d.rounded_rectangle((bx0, by, bx1, by+14), radius=7, fill=(40,62,88,255))
+        d.rounded_rectangle((bx1-(bx1-bx0)*v/mx, by, bx1, by+14), radius=7, fill=O+(255,))
+    if sl.get('note'):
+        d.text((R_, top+len(sl['rows'])*rh+2*pad+30), sl['note'], font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
+    source_line(d, R_, 1252)
+    return cv
 
 def idea(sl, page, total):
     """Single image, one question. Headline sits in the calm top of the photo."""
@@ -284,7 +325,9 @@ def render(story_path, out):
     SECTION = ns.get('SECTION', 'news')
     os.makedirs(out, exist_ok=True)
     for i, sl in enumerate(ns['SLIDES'], 1):
-        cv = {'cover': cover, 'inner': inner, 'poll': poll, 'idea': idea}[sl['kind']](sl, i, len(ns['SLIDES']))
+        cv = {'cover': cover, 'inner': inner, 'poll': poll, 'idea': idea, 'stats': stats}[sl['kind']](sl, i, len(ns['SLIDES']))
+        if sl.get('credit') and sl['kind'] != 'idea':      # photo credit when the licence asks for one
+            ImageDraw.Draw(cv).text((W/2, 1294), sl['credit'], font=F(LT_TEXT, 19), fill=(INK_SOFT if light() else SOFT)+(255,), anchor='mm', direction='ltr', language='en')
         p = os.path.join(out, f"{ns['NAME']}-{i}.png"); cv.convert('RGB').save(p, quality=95); print(p)
 
 if __name__ == '__main__':
