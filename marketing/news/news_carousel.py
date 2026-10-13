@@ -294,6 +294,28 @@ def stats(sl, page, total):
     source_line(d, R_, 1252)
     return cv
 
+def ask(sl, page, total):
+    """Open question, no options: one line of setup, the question in orange."""
+    cv = bg(sl['bg'])
+    ys = np.arange(H, dtype=np.float32); y0 = sl.get('top', 700)
+    for a_ in (np.clip(1-ys/240, 0, 1)**1.4*0.75,
+               np.exp(-0.5*((ys-(y0+110))/190)**2)*0.82,
+               np.clip((ys-1200)/150, 0, 1)*0.85):
+        lay = Image.new('RGBA', (W, H), DEEP+(0,))
+        lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8))); cv.alpha_composite(lay)
+    d = ImageDraw.Draw(cv)
+    chrome(cv, d, page, total)
+    fe = F(AR_BOLD, 30); ew = w_ar(sl['chip'], fe) + 48; eh = 58
+    d.rectangle((W/2-ew/2, y0-eh-40, W/2+ew/2, y0-40), fill=O+(255,))
+    d.text((W/2, y0-40-eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
+    y = y0
+    for txt, col, size in sl['lines']:
+        while w_ar(txt, F(AR_BLACK, size)) > W - 2*M: size -= 2
+        y += round(size*1.25)
+        d.text((W/2, y), txt, font=F(AR_BLACK, size), fill=col+(255,), anchor='ms', direction='rtl', language='ar')
+    source_line(d, W/2, 1245, anchor='ms')
+    return cv
+
 def idea(sl, page, total):
     """Single image, one question. Headline sits in the calm top of the photo."""
     cv = bg(sl['bg'])
@@ -325,7 +347,7 @@ def render(story_path, out):
     SECTION = ns.get('SECTION', 'news')
     os.makedirs(out, exist_ok=True)
     for i, sl in enumerate(ns['SLIDES'], 1):
-        cv = {'cover': cover, 'inner': inner, 'poll': poll, 'idea': idea, 'stats': stats}[sl['kind']](sl, i, len(ns['SLIDES']))
+        cv = {'cover': cover, 'inner': inner, 'poll': poll, 'idea': idea, 'stats': stats, 'ask': ask}[sl['kind']](sl, i, len(ns['SLIDES']))
         if sl.get('credit') and sl['kind'] != 'idea':      # photo credit when the licence asks for one
             ImageDraw.Draw(cv).text((W/2, 1294), sl['credit'], font=F(LT_TEXT, 19), fill=(INK_SOFT if light() else SOFT)+(255,), anchor='mm', direction='ltr', language='en')
         p = os.path.join(out, f"{ns['NAME']}-{i}.png"); cv.convert('RGB').save(p, quality=95); print(p)
