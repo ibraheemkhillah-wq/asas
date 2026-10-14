@@ -21,7 +21,7 @@ nc.THEME = 'dark'
 
 def shade(cv):
     ys = np.arange(H, dtype=np.float32)
-    for a, tone in ((np.clip(1-ys/300, 0, 1)**1.3*0.70, DEEP), (np.clip((ys-430)/420, 0, 1)**1.1*0.93, BLOOD)):
+    for a, tone in ((np.clip(1-ys/260, 0, 1)**1.3*0.65, DEEP), (np.clip((ys-560)/280, 0, 1)**1.1*0.95, BLOOD)):
         lay = Image.new('RGBA', (W, H), tone+(0,))
         lay.putalpha(Image.fromarray((np.repeat(a[:, None], W, 1)*255).astype(np.uint8)))
         cv.alpha_composite(lay)
@@ -55,13 +55,13 @@ def main(bg_path, out):
     im = im.resize((round(im.width*s), round(im.height*s)), Image.LANCZOS)
     cv = im.crop(((im.width-W)//2, (im.height-H)//2, (im.width-W)//2+W, (im.height-H)//2+H))
     shade(cv)
-    tint = Image.new('RGBA', (W, H), ALERT+(46,)); cv.alpha_composite(tint)      # whole scene leans red
+    tint = Image.new('RGBA', (W, H), ALERT+(34,)); cv.alpha_composite(tint)      # whole scene leans red
     d = ImageDraw.Draw(cv)
     # logo
     lg = Image.open(LOGO_WHITE).convert('RGBA'); LW = 270
     cv.alpha_composite(lg.resize((LW, round(LW*lg.height/lg.width)), Image.LANCZOS), (M-6, 46))
     # 'عاجل' hazard banner: full width, the loudest thing on the page
-    by, bh = 424, 134
+    by, bh = 626, 112
     glow = Image.new('RGBA', (W, H), (0, 0, 0, 0)); ImageDraw.Draw(glow).rectangle((M-10, by-10, R_+10, by+bh+10), fill=ALERT_HI+(200,))
     cv.alpha_composite(glow.filter(ImageFilter.GaussianBlur(34)))
     stripe = Image.new('RGBA', (W, H), (0, 0, 0, 0)); sd = ImageDraw.Draw(stripe)
@@ -75,42 +75,44 @@ def main(bg_path, out):
     stripes_only = Image.new('RGBA', (W, H), (0, 0, 0, 0)); stripes_only.paste(stripe, (0, 0), tape)
     cv.alpha_composite(base); cv.alpha_composite(stripes_only)
     d = ImageDraw.Draw(cv)
-    fa = F(AR_BLACK, 92); label = 'عاجل'
-    lw = w_ar(label, fa); gapx = 30; ts = 78
+    fa = F(AR_BLACK, 82); label = 'عاجل'
+    lw = w_ar(label, fa); gapx = 28; ts = 70
     total = lw + 2*(ts+gapx); cx0 = W/2 - total/2
     warn_triangle(d, cx0 + ts/2, by+bh/2+2, ts, Wh+(255,), ALERT+(255,))
     d.text((W/2, by+bh/2+6), label, font=fa, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
     warn_triangle(d, cx0 + total - ts/2, by+bh/2+2, ts, Wh+(255,), ALERT+(255,))
     # headline
-    d.text((R_, 650), 'عملاءنا الكرام..', font=F(AR_BLACK, 70), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
-    d.text((R_, 752), 'لسلامتكم', font=F(AR_BLACK, 104), fill=ALERT_HI+(255,), anchor='rs', direction='rtl', language='ar')
+    fh1 = F(AR_BLACK, 58); fh2 = F(AR_BLACK, 74)
+    t1 = 'عملاءنا الكرام..'; t2 = 'لسلامتكم'
+    d.text((R_, 826), t1, font=fh1, fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
+    d.text((R_ - w_ar(t1, fh1) - 18, 826), t2, font=fh2, fill=ALERT_HI+(255,), anchor='rs', direction='rtl', language='ar')
     # message
-    fb = F(CT_FONT, 38)
+    fb = F(CT_FONT, 34)
     lines, sp = nc.wrap(nc.tokens([('نرجو منكم أخذ الحيطة والحذر جراء', Wh), ('الأمطار الغزيرة والسيول', ALERT_HI),
                                    ('وإغلاقات بعض الشوارع.', Wh)]), fb, R_ - M - 40)
-    y = 780
-    d.rectangle((R_-8, y, R_, y+len(lines)*64+20), fill=ALERT_HI+(255,))
-    nc.draw_lines(d, lines, sp, fb, R_-30, y+52, 64)
+    y = 850
+    d.rectangle((R_-8, y, R_, y+len(lines)*56+14), fill=ALERT_HI+(255,))
+    nc.draw_lines(d, lines, sp, fb, R_-30, y+44, 56)
     # two do-not rules
-    y = 780 + len(lines)*64 + 34
+    y = 850 + len(lines)*56 + 26
     rules = [(icon_no_entry, 'تجنّبوا جميع الطرق المغلقة'),
              (icon_waves, 'لا تدخلوا مناطق تجمّع المياه مهما كانت')]
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); ld = ImageDraw.Draw(lay)
-    rh = 104
+    rh = 92
     for i in range(len(rules)):
-        ld.rectangle((M, y+i*(rh+14), R_, y+i*(rh+14)+rh), fill=BLOOD+(232,), outline=ALERT+(255,), width=2)
+        ld.rectangle((M, y+i*(rh+12), R_, y+i*(rh+12)+rh), fill=BLOOD+(232,), outline=ALERT+(255,), width=2)
     cv.alpha_composite(lay); d = ImageDraw.Draw(cv)
     fr = F(AR_BLACK, 38)
     for i, (ic, txt) in enumerate(rules):
-        ry = y + i*(rh+14)
-        ic(d, R_-70, ry+rh/2, 64, ALERT)
-        size = 38
+        ry = y + i*(rh+12)
+        ic(d, R_-64, ry+rh/2, 58, ALERT)
+        size = 36
         while w_ar(txt, F(AR_BLACK, size)) > R_-M-150: size -= 2
-        d.text((R_-122, ry+rh/2+6), txt, font=F(AR_BLACK, size), fill=Wh+(255,), anchor='rm', direction='rtl', language='ar')
+        d.text((R_-112, ry+rh/2+6), txt, font=F(AR_BLACK, size), fill=Wh+(255,), anchor='rm', direction='rtl', language='ar')
     # help line + footer
-    y = y + len(rules)*(rh+14) + 30
-    fh = F(AR_BOLD, 32)
-    d.text((R_, y+30), 'للمساعدة أو الاستفسار تواصلوا معنا', font=fh, fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
+    y = y + len(rules)*(rh+12) + 18
+    fh = F(AR_BOLD, 29)
+    d.text((R_, y+26), 'للمساعدة أو الاستفسار تواصلوا معنا', font=fh, fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
     ic = load_icons(34); fc = F(nc.CT_FONT, 29); fy = 1292; x = M
     for k in ('ig', 'fb'):
         cv.alpha_composite(ic[k], (x, fy-17)); x += 44
