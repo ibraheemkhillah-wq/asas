@@ -10,17 +10,19 @@ sys.path.insert(0, sys.argv[1]); sys.path.insert(0, os.path.join(HERE, '..', 'ne
 import news_carousel as nc
 from news_carousel import W, H, M, R_, O, Wh, DEEP, LOGONAVY, SOFT, F, AR_BLACK, AR_BOLD, CT_FONT, w_ar
 from brand import LOGO_WHITE, load_icons
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
 
 ALERT = (214, 40, 40)
+ALERT_HI = (255, 72, 60)             # brighter red for type on dark
+BLOOD = (38, 6, 10)                  # red-black shade for the photo
 nc.THEME = 'dark'
 
 
 def shade(cv):
     ys = np.arange(H, dtype=np.float32)
-    for a in (np.clip(1-ys/300, 0, 1)**1.3*0.70, np.clip((ys-430)/420, 0, 1)**1.1*0.92):
-        lay = Image.new('RGBA', (W, H), DEEP+(0,))
+    for a, tone in ((np.clip(1-ys/300, 0, 1)**1.3*0.70, DEEP), (np.clip((ys-430)/420, 0, 1)**1.1*0.93, BLOOD)):
+        lay = Image.new('RGBA', (W, H), tone+(0,))
         lay.putalpha(Image.fromarray((np.repeat(a[:, None], W, 1)*255).astype(np.uint8)))
         cv.alpha_composite(lay)
 
@@ -52,12 +54,16 @@ def main(bg_path, out):
     s = max(W/im.width, H/im.height)
     im = im.resize((round(im.width*s), round(im.height*s)), Image.LANCZOS)
     cv = im.crop(((im.width-W)//2, (im.height-H)//2, (im.width-W)//2+W, (im.height-H)//2+H))
-    shade(cv); d = ImageDraw.Draw(cv)
+    shade(cv)
+    tint = Image.new('RGBA', (W, H), ALERT+(46,)); cv.alpha_composite(tint)      # whole scene leans red
+    d = ImageDraw.Draw(cv)
     # logo
     lg = Image.open(LOGO_WHITE).convert('RGBA'); LW = 270
     cv.alpha_composite(lg.resize((LW, round(LW*lg.height/lg.width)), Image.LANCZOS), (M-6, 46))
     # 'عاجل' hazard banner: full width, the loudest thing on the page
-    by, bh = 438, 112
+    by, bh = 424, 134
+    glow = Image.new('RGBA', (W, H), (0, 0, 0, 0)); ImageDraw.Draw(glow).rectangle((M-10, by-10, R_+10, by+bh+10), fill=ALERT_HI+(200,))
+    cv.alpha_composite(glow.filter(ImageFilter.GaussianBlur(34)))
     stripe = Image.new('RGBA', (W, H), (0, 0, 0, 0)); sd = ImageDraw.Draw(stripe)
     sd.rectangle((M, by, R_, by+bh), fill=ALERT+(255,))
     for x in range(M-bh, R_+bh, 44):                           # red-black hazard tape on both ends
@@ -69,30 +75,30 @@ def main(bg_path, out):
     stripes_only = Image.new('RGBA', (W, H), (0, 0, 0, 0)); stripes_only.paste(stripe, (0, 0), tape)
     cv.alpha_composite(base); cv.alpha_composite(stripes_only)
     d = ImageDraw.Draw(cv)
-    fa = F(AR_BLACK, 76); label = 'عاجل'
-    lw = w_ar(label, fa); gapx = 26; ts = 66
+    fa = F(AR_BLACK, 92); label = 'عاجل'
+    lw = w_ar(label, fa); gapx = 30; ts = 78
     total = lw + 2*(ts+gapx); cx0 = W/2 - total/2
     warn_triangle(d, cx0 + ts/2, by+bh/2+2, ts, Wh+(255,), ALERT+(255,))
     d.text((W/2, by+bh/2+6), label, font=fa, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
     warn_triangle(d, cx0 + total - ts/2, by+bh/2+2, ts, Wh+(255,), ALERT+(255,))
     # headline
-    d.text((R_, 640), 'عملاءنا الكرام..', font=F(AR_BLACK, 70), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
-    d.text((R_, 742), 'لسلامتكم', font=F(AR_BLACK, 104), fill=O+(255,), anchor='rs', direction='rtl', language='ar')
+    d.text((R_, 650), 'عملاءنا الكرام..', font=F(AR_BLACK, 70), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
+    d.text((R_, 752), 'لسلامتكم', font=F(AR_BLACK, 104), fill=ALERT_HI+(255,), anchor='rs', direction='rtl', language='ar')
     # message
     fb = F(CT_FONT, 38)
-    lines, sp = nc.wrap(nc.tokens([('نرجو منكم أخذ الحيطة والحذر جراء', Wh), ('الأمطار الغزيرة والسيول', O),
+    lines, sp = nc.wrap(nc.tokens([('نرجو منكم أخذ الحيطة والحذر جراء', Wh), ('الأمطار الغزيرة والسيول', ALERT_HI),
                                    ('وإغلاقات بعض الشوارع.', Wh)]), fb, R_ - M - 40)
-    y = 772
-    d.rectangle((R_-8, y, R_, y+len(lines)*64+20), fill=O+(255,))
+    y = 780
+    d.rectangle((R_-8, y, R_, y+len(lines)*64+20), fill=ALERT_HI+(255,))
     nc.draw_lines(d, lines, sp, fb, R_-30, y+52, 64)
     # two do-not rules
-    y = 772 + len(lines)*64 + 36
+    y = 780 + len(lines)*64 + 34
     rules = [(icon_no_entry, 'تجنّبوا جميع الطرق المغلقة'),
              (icon_waves, 'لا تدخلوا مناطق تجمّع المياه مهما كانت')]
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); ld = ImageDraw.Draw(lay)
     rh = 104
     for i in range(len(rules)):
-        ld.rectangle((M, y+i*(rh+14), R_, y+i*(rh+14)+rh), fill=DEEP+(225,), outline=(255, 255, 255, 46), width=1)
+        ld.rectangle((M, y+i*(rh+14), R_, y+i*(rh+14)+rh), fill=BLOOD+(232,), outline=ALERT+(255,), width=2)
     cv.alpha_composite(lay); d = ImageDraw.Draw(cv)
     fr = F(AR_BLACK, 38)
     for i, (ic, txt) in enumerate(rules):
@@ -110,6 +116,9 @@ def main(bg_path, out):
         cv.alpha_composite(ic[k], (x, fy-17)); x += 44
     d.text((x+6, fy+2), 'callrenttr', font=fc, fill=Wh+(255,), anchor='lm', direction='ltr', language='en')
     d.text((R_, fy+2), '+90 555 034 22 00', font=F(nc.CT_FONT, 34), fill=Wh+(255,), anchor='rm', direction='ltr', language='en')
+    # red frame round the whole post
+    d.rectangle((0, 0, W-1, H-1), outline=ALERT+(255,), width=14)
+    d.rectangle((22, 22, W-23, H-23), outline=ALERT_HI+(140,), width=2)
     cv.convert('RGB').save(out, quality=95); print(out)
 
 
