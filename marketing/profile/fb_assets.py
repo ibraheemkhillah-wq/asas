@@ -6,7 +6,7 @@ import sys, os, math
 sys.path.insert(0, sys.argv[1])
 from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
-from brand import ORANGE, WHITE, SOFT, F, LT_REG, CT_FONT, SLOGAN, LOGO_WHITE, load_icons, w_lt
+from brand import ORANGE, WHITE, SOFT, LOGONAVY, F, LT_REG, LT_TEXT, CT_FONT, SLOGAN, LOGO_WHITE, LOGO_NAVY, load_icons, w_lt
 
 TOP = np.array((36, 124, 166), np.float32)      # lit corner, as on the Instagram avatar
 LOW = np.array((22, 66, 100), np.float32)       # deep corner
@@ -48,56 +48,42 @@ def profile(out, S=1080):
     cv.convert('RGB').save(out, quality=95); print(out)
 
 
-def skyline(w, h, base, col, k=1.0):
-    """Istanbul silhouette: Galata Tower, domes and minarets, drawn flat."""
-    lay = Image.new('RGBA', (w, h), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
-    d.rectangle((0, base, w, h), fill=col)
-    def mosque(cx, r, mh):
-        d.pieslice((cx-r, base-r, cx+r, base+r), 180, 360, fill=col)
-        d.rectangle((cx-r*1.5, base-r*0.35, cx+r*1.5, base), fill=col)
-        for sx in (-1, 1):
-            d.pieslice((cx+sx*r*1.15-r*0.45, base-r*0.8, cx+sx*r*1.15+r*0.45, base+r*0.1), 180, 360, fill=col)
-        for sx in (-1, 1):
-            mx = cx + sx*r*2.0
-            d.rectangle((mx-4, base-mh, mx+4, base), fill=col)
-            d.polygon([(mx-6, base-mh), (mx+6, base-mh), (mx, base-mh-22)], fill=col)
-            d.rectangle((mx-8, base-mh*0.66, mx+8, base-mh*0.66+5), fill=col)
-    def galata(cx, th):
-        d.rectangle((cx-22, base-th, cx+22, base), fill=col)
-        d.rectangle((cx-28, base-th-8, cx+28, base-th+5), fill=col)
-        d.polygon([(cx-26, base-th-8), (cx+26, base-th-8), (cx, base-th-64)], fill=col)
-    for cx, r, mh in ((170, 58, 150), (520, 78, 190), (1180, 70, 175), (1500, 52, 140)):
-        mosque(cx, r*k, mh*k)
-    galata(860, 150*k)
-    return lay
+def navy_icon(im):
+    """White glyph icons -> navy glyphs on white (same mapping as the light news theme)."""
+    a = np.array(im).astype(np.float32); L = a[..., :3].mean(2, keepdims=True)/255
+    a[..., :3] = np.array(LOGONAVY, np.float32)*L + 255*(1-L)
+    return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
 
 def cover(out, w=1640, h=624):
-    cv = field(w, h, (0.82, 0.0))
-    cv.alpha_composite(rays(w, h, (w*1.18, h*0.70), 90, (math.pi*0.93, math.pi*1.16), alpha=(14, 55)))
-    sk = skyline(w, h, h-34, (14, 44, 70, 255), k=0.62).filter(ImageFilter.GaussianBlur(0.6))
-    fade = Image.new('L', (w, h), 0); fd = ImageDraw.Draw(fade)
-    for y in range(h):                                     # skyline fades in toward the bottom edge
-        fd.line([(0, y), (w, y)], fill=int(255*np.clip((y-(h-190))/140, 0, 1)*0.9))
-    sk.putalpha(Image.fromarray(np.minimum(np.array(sk.getchannel('A')), np.array(fade))))
-    cv.alpha_composite(sk)
-    d = ImageDraw.Draw(cv); cx = w//2                       # keep everything in the mobile-safe centre
-    lg = logo(500); cv.alpha_composite(lg, (cx - lg.width//2, 92))
-    fs = F(LT_REG, 34); track = 1.6
+    """Clean light cover: navy logo, slogan, contacts. No artwork in the background."""
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    r = np.sqrt(((xs-w/2)/w)**2 + ((ys-h*0.45)/h)**2)
+    g = np.clip(r/0.75, 0, 1)[..., None]
+    bg = np.array((255, 255, 255), np.float32)*(1-g) + np.array((228, 236, 243), np.float32)*g
+    cv = Image.fromarray(bg.astype(np.uint8)).convert('RGBA')
+    d = ImageDraw.Draw(cv); cx = w//2                       # everything in the mobile-safe centre
+    lg = Image.open(LOGO_NAVY).convert('RGBA'); lw = 520
+    lg = lg.resize((lw, round(lw*lg.height/lg.width)), Image.LANCZOS)
+    top = 128; cv.alpha_composite(lg, (cx - lw//2, top))
+    # slogan: bigger, navy, with orange rules either side
+    fs = F(LT_TEXT, 46); track = 1.2; sy = top + lg.height + 62
     tw = sum(w_lt(c, fs) for c in SLOGAN) + track*(len(SLOGAN)-1); x = cx - tw/2
     for c in SLOGAN:
-        d.text((x, 92+lg.height+52), c, font=fs, fill=ORANGE+(255,), anchor='lm'); x += w_lt(c, fs) + track
+        d.text((x, sy), c, font=fs, fill=LOGONAVY+(255,), anchor='lm'); x += w_lt(c, fs) + track
+    for sx in (-1, 1):
+        x0 = cx + sx*(tw/2 + 28); d.line([(x0, sy), (x0 + sx*70, sy)], fill=ORANGE+(255,), width=4)
     # contacts on one line: [wa][call] number  |  [ig][fb] callrenttr
-    ic = load_icons(40); fc = F(CT_FONT, 36); y = 92 + lg.height + 128
+    ic = {k: navy_icon(v) for k, v in load_icons(40).items()}; fc = F(CT_FONT, 38); y = sy + 92
     groups = [(('wa', 'ph'), '+90 555 034 22 00'), (('ig', 'fb'), 'callrenttr')]
-    widths = [2*40 + 10 + 16 + w_lt(t, fc) for _, t in groups]; sep = 56
+    widths = [2*40 + 10 + 16 + w_lt(t, fc) for _, t in groups]; sep = 60
     x = cx - (sum(widths) + sep)/2
     for gi, (keys, txt) in enumerate(groups):
         for k in keys:
             cv.alpha_composite(ic[k], (round(x), y-20)); x += 50
-        d.text((x+6, y+2), txt, font=fc, fill=WHITE+(255,), anchor='lm'); x += 16 + w_lt(txt, fc) - 6
+        d.text((x+6, y+2), txt, font=fc, fill=LOGONAVY+(255,), anchor='lm'); x += 16 + w_lt(txt, fc) - 6
         if gi == 0:
-            d.line([(x+sep/2, y-18), (x+sep/2, y+20)], fill=ORANGE+(255,), width=3); x += sep
+            d.line([(x+sep/2, y-20), (x+sep/2, y+22)], fill=ORANGE+(255,), width=3); x += sep
     cv.convert('RGB').save(out, quality=95); print(out)
 
 
