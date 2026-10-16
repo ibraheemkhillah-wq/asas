@@ -1,11 +1,11 @@
 """CALL & RENT «عدّاد مفتوح» (unlimited km): two separate service posts, rendered at 2160x2700.
 
 usage: python3 okm_posts.py <brand-kit dir> <tiggo cutout png> <out dir>
-  1) okm-sign:     Istanbul highway, overhead sign reading ∞ km, our Tiggo 8 underneath
-  2) okm-odometer: cockpit view, the instrument display reads ∞ km
-Backgrounds: Canva (okm-sign-scene.jpg, okm-odo-scene.jpg). The ∞ is drawn as a curve, not a glyph.
+  1) okm-sign:     Istanbul highway, overhead sign reading OPEN km, our Tiggo 8 underneath
+  2) okm-odometer: cockpit view, the instrument display reads OPEN km
+Backgrounds: Canva (okm-sign-scene.jpg, okm-odo-scene.jpg).
 """
-import sys, os, math
+import sys, os
 sys.path.insert(0, sys.argv[1])
 from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
@@ -19,15 +19,6 @@ DEEP = (8, 24, 41)
 
 
 def S(v): return round(v*K)
-
-
-def infinity(d, cx, cy, w, width, fill):
-    """Lemniscate of Bernoulli, stroked as one smooth polyline."""
-    a = w/2/1.0; pts = []
-    for i in range(721):
-        t = 2*math.pi*i/720; den = 1 + math.sin(t)**2
-        pts.append((cx + a*math.cos(t)/den, cy + a*math.sin(t)*math.cos(t)/den*1.15))
-    d.line(pts, fill=fill, width=width, joint='curve')
 
 
 def shade(cv, bands):
@@ -71,9 +62,9 @@ def headline(cv, y, sub=True):
     d.text((R_, y), t1, font=f1, fill=WHITE+(255,), anchor='rs', direction='rtl', language='ar')
     d.text((R_ - w_ar(t1, f1) - S(26), y), t2, font=f1, fill=ORANGE+(255,), anchor='rs', direction='rtl', language='ar')
     if sub:
-        d.text((R_, y + S(58)), 'سوق بكل اسطنبول على راحتك، بدون حد للمسافة', font=F(AR_BOLD, S(32)),
+        d.text((R_, y + S(88)), 'سوق بكل اسطنبول على راحتك، بدون حد للمسافة', font=F(AR_BOLD, S(32)),
                fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
-        d.text((R_, y + S(98)), 'مطابق للشروط والأحكام', font=F(AR_BOLD, S(22)),
+        d.text((R_, y + S(128)), 'مطابق للشروط والأحكام', font=F(AR_BOLD, S(22)),
                fill=(150, 170, 190, 255), anchor='rs', direction='rtl', language='ar')
 
 
@@ -104,8 +95,10 @@ def sign_post(cut_path, out):
     sign = Image.new('RGBA', (x1-x0, y1-y0), g+(255,)); sd = ImageDraw.Draw(sign)
     sd.rounded_rectangle((14, 14, x1-x0-15, y1-y0-15), radius=22, outline=(236, 240, 236, 255), width=10)
     sh = y1 - y0; cy = sh/2
-    infinity(sd, (x1-x0)/2 - 150, cy, 420, 46, ORANGE+(255,))
-    sd.text(((x1-x0)/2 + 170, cy + 8), 'km', font=F(LT_BOLD, 200), fill=(240, 244, 240, 255), anchor='lm')
+    fo = F(LT_BOLD, 210); fk = F(LT_BOLD, 150); gap = 50                 # OPEN km, centred right of the arrow
+    tw = w_lt('OPEN', fo) + gap + w_lt('km', fk); gx = (x1-x0)/2 + 70 - tw/2
+    sd.text((gx, cy + 8), 'OPEN', font=fo, fill=ORANGE+(255,), anchor='lm')
+    sd.text((gx + w_lt('OPEN', fo) + gap, cy + 26), 'km', font=fk, fill=(240, 244, 240, 255), anchor='lm')
     # arrow (straight ahead) on the left
     ax = 170; sd.polygon([(ax, cy-120), (ax-70, cy-30), (ax-24, cy-30), (ax-24, cy+120), (ax+24, cy+120), (ax+24, cy-30), (ax+70, cy-30)],
                          fill=(240, 244, 240, 255))
@@ -125,7 +118,7 @@ def sign_post(cut_path, out):
     cv.alpha_composite(car, (cx0, cy0))
     shade(cv, [(lambda ys: np.clip(1 - ys/S(260), 0, 1)**1.4*0.55, DEEP), (lambda ys: np.clip((ys - S(960))/S(190), 0, 1)**1.1*0.95, DEEP)])
     chrome(cv)
-    headline(cv, S(1118))
+    headline(cv, S(1088))
     footer(cv, S(1300))
     cv.convert('RGB').save(out, optimize=True); print(out, cv.size)
 
@@ -136,18 +129,20 @@ def odometer_post(out):
     # the display reads ∞ km: orange tube with a bloom, like a live digital readout
     cx, cy = W/2, S(735)
     glow = Image.new('RGBA', (W, H), (0, 0, 0, 0)); gd = ImageDraw.Draw(glow)
-    infinity(gd, cx - S(70), cy - S(10), S(330), S(26), ORANGE+(255,))
-    gd.text((cx + S(150), cy - S(4)), 'km', font=F(LT_BOLD, S(96)), fill=ORANGE+(255,), anchor='lm')
+    fo = F(LT_BOLD, S(150)); fk = F(LT_BOLD, S(80)); gap = S(28)
+    tw = w_lt('OPEN', fo) + gap + w_lt('km', fk); gx = cx - tw/2
+    gd.text((gx, cy), 'OPEN', font=fo, fill=ORANGE+(255,), anchor='lm')
+    gd.text((gx + w_lt('OPEN', fo) + gap, cy + S(14)), 'km', font=fk, fill=ORANGE+(255,), anchor='lm')
     for r in (S(30), S(10)):                                # two-step bloom under the tube
         cv.alpha_composite(glow.filter(ImageFilter.GaussianBlur(r)))
     cv.alpha_composite(glow)
     core = Image.new('RGBA', (W, H), (0, 0, 0, 0)); cd = ImageDraw.Draw(core)
-    infinity(cd, cx - S(70), cy - S(10), S(330), S(9), (255, 228, 205, 255))
+    cd.text((gx, cy), 'OPEN', font=fo, fill=(255, 196, 150, 255), anchor='lm')        # brighter core over the bloom
     cv.alpha_composite(core)
     d = ImageDraw.Draw(cv)
     d.text((cx, cy + S(150)), 'ODO', font=F(LT_TEXT, S(30)), fill=(150, 175, 200, 255), anchor='mm')
     chrome(cv)
-    headline(cv, S(1118))
+    headline(cv, S(1088))
     footer(cv, S(1300))
     cv.convert('RGB').save(out, optimize=True); print(out, cv.size)
 
