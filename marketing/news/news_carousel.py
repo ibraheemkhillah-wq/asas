@@ -3,7 +3,7 @@
 usage: python3 news_carousel.py <brand-kit dir> stories/<story>.py <out dir>
 Each story file sets NAME, THEME ("dark" | "light") and SLIDES; backgrounds live next to this file.
 """
-import sys, os
+import sys, os, re
 KIT = sys.argv[1] if __name__ == '__main__' else os.environ.get('CALLRENT_KIT', '')
 sys.path.insert(0, KIT)
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,6 +49,8 @@ def tokens(runs):
     """runs: [(text, colour)] -> [(word, colour)]; keep Latin phrases glued with NBSP."""
     out = []
     for txt, col in runs:
+        if txt == '\n':                                   # explicit line break inside a body
+            out.append(('\n', col)); continue
         for wd in txt.split(' '):
             if wd: out.append((wd, col))
     return out
@@ -56,9 +58,15 @@ def tokens(runs):
 def wrap(tok, f, maxw):
     sp = w_ar(' ', f) or f.size*0.28
     lines, cur, cw = [], [], 0
-    for wd, col in tok:
+    for i, (wd, col) in enumerate(tok):
+        if wd == '\n':
+            if cur: lines.append(cur)
+            cur, cw = [], 0; continue
         ww = tw(wd.replace(' ', ' '), f)
-        if cur and cw + sp + ww > maxw:
+        need = ww                                         # a number never ends a line: keep it with its unit
+        if re.fullmatch(r'[\d.,]+', wd) and i + 1 < len(tok) and tok[i+1][0] != '\n':
+            need += sp + tw(tok[i+1][0], f)
+        if cur and cw + sp + need > maxw:
             lines.append(cur); cur, cw = [], 0
         cw += (sp if cur else 0) + ww; cur.append((wd, col, ww))
     if cur: lines.append(cur)
