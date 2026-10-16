@@ -95,10 +95,10 @@ def sign_post(cut_path, out):
     sign = Image.new('RGBA', (x1-x0, y1-y0), g+(255,)); sd = ImageDraw.Draw(sign)
     sd.rounded_rectangle((14, 14, x1-x0-15, y1-y0-15), radius=22, outline=(236, 240, 236, 255), width=10)
     sh = y1 - y0; cy = sh/2
-    fo = F(LT_BOLD, 210); fk = F(LT_BOLD, 150); gap = 50                 # OPEN km, centred right of the arrow
-    tw = w_lt('OPEN', fo) + gap + w_lt('km', fk); gx = (x1-x0)/2 + 70 - tw/2
-    sd.text((gx, cy + 8), 'OPEN', font=fo, fill=ORANGE+(255,), anchor='lm')
-    sd.text((gx + w_lt('OPEN', fo) + gap, cy + 26), 'km', font=fk, fill=(240, 244, 240, 255), anchor='lm')
+    fs = F(LT_BOLD, 180); gap = 60                                       # OPEN km: one face, one size, sign white
+    tw = w_lt('OPEN', fs) + gap + w_lt('km', fs); gx = (x1-x0)/2 + 70 - tw/2
+    sd.text((gx, cy + 10), 'OPEN', font=fs, fill=(240, 244, 240, 255), anchor='lm')
+    sd.text((gx + w_lt('OPEN', fs) + gap, cy + 10), 'km', font=fs, fill=(240, 244, 240, 255), anchor='lm')
     # arrow (straight ahead) on the left
     ax = 170; sd.polygon([(ax, cy-120), (ax-70, cy-30), (ax-24, cy-30), (ax-24, cy+120), (ax+24, cy+120), (ax+24, cy-30), (ax+70, cy-30)],
                          fill=(240, 244, 240, 255))
@@ -126,21 +126,24 @@ def sign_post(cut_path, out):
 def odometer_post(out):
     cv = Image.open(os.path.join(HERE, 'okm-odo-scene.jpg')).convert('RGBA')
     shade(cv, [(lambda ys: np.clip(1 - ys/S(240), 0, 1)**1.4*0.55, DEEP), (lambda ys: np.clip((ys - S(960))/S(190), 0, 1)**1.1*0.94, DEEP)])
-    # the display reads ∞ km: orange tube with a bloom, like a live digital readout
-    cx, cy = W/2, S(735)
-    glow = Image.new('RGBA', (W, H), (0, 0, 0, 0)); gd = ImageDraw.Draw(glow)
-    fo = F(LT_BOLD, S(150)); fk = F(LT_BOLD, S(80)); gap = S(28)
-    tw = w_lt('OPEN', fo) + gap + w_lt('km', fk); gx = cx - tw/2
-    gd.text((gx, cy), 'OPEN', font=fo, fill=ORANGE+(255,), anchor='lm')
-    gd.text((gx + w_lt('OPEN', fo) + gap, cy + S(14)), 'km', font=fk, fill=ORANGE+(255,), anchor='lm')
-    for r in (S(30), S(10)):                                # two-step bloom under the tube
-        cv.alpha_composite(glow.filter(ImageFilter.GaussianBlur(r)))
-    cv.alpha_composite(glow)
-    core = Image.new('RGBA', (W, H), (0, 0, 0, 0)); cd = ImageDraw.Draw(core)
-    cd.text((gx, cy), 'OPEN', font=fo, fill=(255, 196, 150, 255), anchor='lm')        # brighter core over the bloom
-    cv.alpha_composite(core)
-    d = ImageDraw.Draw(cv)
-    d.text((cx, cy + S(150)), 'ODO', font=F(LT_TEXT, S(30)), fill=(150, 175, 200, 255), anchor='mm')
+    # the display reads like a real cluster odometer line: ODO  OPEN  km, thin white digital type
+    cx, cy = W/2, S(722)
+    INK = (236, 244, 252); BLUE = (110, 170, 255)
+    fv = F('Oxanium-400.ttf', S(118)); fl = F(LT_TEXT, S(30)); fu = F('Oxanium-400.ttf', S(46))
+    track = S(6)
+    def spaced_w(t, f): return sum(w_lt(c, f) for c in t) + track*(len(t)-1)
+    lab, val, unit = 'ODO', 'OPEN', 'km'; g1, g2 = S(34), S(22)
+    tw = w_lt(lab, fl) + g1 + spaced_w(val, fv) + g2 + w_lt(unit, fu); x = cx - tw/2
+    txt = Image.new('RGBA', (W, H), (0, 0, 0, 0)); td = ImageDraw.Draw(txt)
+    td.text((x, cy + S(18)), lab, font=fl, fill=(150, 172, 196, 255), anchor='ls'); x += w_lt(lab, fl) + g1
+    for c in val:
+        td.text((x, cy + S(18)), c, font=fv, fill=INK+(255,), anchor='ls'); x += w_lt(c, fv) + track
+    x += g2 - track
+    td.text((x, cy + S(18)), unit, font=fu, fill=INK+(230,), anchor='ls')
+    # thin scale line under the reading, like the cluster's trip bar
+    bw = S(420); td.line([(cx - bw/2, cy + S(66)), (cx + bw/2, cy + S(66))], fill=BLUE+(170,), width=S(3))
+    halo = Image.new('RGBA', (W, H), BLUE+(0,)); halo.putalpha(txt.getchannel('A').filter(ImageFilter.GaussianBlur(S(14))).point(lambda v: v*55//100))
+    cv.alpha_composite(halo); cv.alpha_composite(txt)
     chrome(cv)
     headline(cv, S(1088))
     footer(cv, S(1300))
