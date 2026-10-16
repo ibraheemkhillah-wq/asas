@@ -127,7 +127,7 @@ def odometer_post(out):
     cv = Image.open(os.path.join(HERE, 'okm-odo-scene.jpg')).convert('RGBA')
     shade(cv, [(lambda ys: np.clip(1 - ys/S(240), 0, 1)**1.4*0.55, DEEP), (lambda ys: np.clip((ys - S(960))/S(190), 0, 1)**1.1*0.94, DEEP)])
     # the display reads like a real cluster odometer line: ODO  OPEN  km, thin white digital type
-    cx, cy = W/2, S(722)
+    cx, cy = W/2, S(818)                                   # optically centred in the black display (y 1290-1890 @2160)
     INK = (236, 244, 252); BLUE = (110, 170, 255)
     fv = F('Oxanium-400.ttf', S(118)); fl = F(LT_TEXT, S(30)); fu = F('Oxanium-400.ttf', S(46))
     track = S(6)
