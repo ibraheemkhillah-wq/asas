@@ -84,7 +84,7 @@ d.polygon([(bx, by+bh-S(22)), (bx, by+bh), (bx+S(22), by+bh)], fill=O+(255,))
 ar(d, (bx+bw/2, by+bh/2+S(2)), label, fb, Wh+(255,), 'mm')
 
 ar(d, (R_, S(222)), 'استلام وتسليم', F(AR_BLACK, S(78)), N+(255,), 'rs')
-ar(d, (R_, S(306)), 'في مطار اسطنبول', F(AR_BLACK, S(62)), O+(255,), 'rs')
+ar(d, (R_, S(306)), 'في مطاري اسطنبول وصبيحة', F(AR_BLACK, S(58)), O+(255,), 'rs')
 
 # ---- the boarding pass -----------------------------------------------------------------
 tx0, ty0, tx1, ty1 = M, S(372), R_, S(842)
@@ -112,13 +112,14 @@ for y in range(int(ty0 + hb + S(30)), int(ty1 - S(30)), S(22)):
 mx0, mx1 = px + S(40), tx1 - S(40)
 lab = F(AR_BOLD, S(24)); sub = F(AR_BOLD, S(24))
 ar(d, (mx1, ty0 + S(150)), 'من', lab, SOFTN+(255,), 'rs')
-d.text((mx1, ty0 + S(250)), 'IST', font=F(LT_BOLD, S(108)), fill=N+(255,), anchor='rs')
+codes = 'IST / SAW'; fcode = F(LT_BOLD, S(60))
+d.text((mx1, ty0 + S(240)), codes, font=fcode, fill=N+(255,), anchor='rs')
 tr_flag(d, mx1 - w_ar('من', lab) - S(66), ty0 + S(124), S(48), S(32))
-ar(d, (mx1, ty0 + S(292)), 'مطار اسطنبول', sub, SOFTN+(255,), 'rs')
+ar(d, (mx1, ty0 + S(292)), 'اسطنبول / صبيحة', sub, SOFTN+(255,), 'rs')
 ar(d, (mx0, ty0 + S(150)), 'إلى', lab, SOFTN+(255,), 'ls')
-ar(d, (mx0, ty0 + S(250)), 'بابك', F(AR_BLACK, S(84)), O+(255,), 'ls')
-ar(d, (mx0, ty0 + S(292)), 'أو أي عنوان في اسطنبول', sub, SOFTN+(255,), 'ls')
-lx0, lx1, ly = mx0 + S(190), mx1 - S(250), ty0 + S(218)
+ar(d, (mx0, ty0 + S(244)), 'بابك', F(AR_BLACK, S(72)), O+(255,), 'ls')
+ar(d, (mx0, ty0 + S(292)), 'أو أي عنوان', sub, SOFTN+(255,), 'ls')
+lx0, lx1, ly = mx0 + w_ar('بابك', F(AR_BLACK, S(72))) + S(26), mx1 - w_lt(codes, fcode) - S(26), ty0 + S(214)
 for x in range(int(lx0), int(lx1), S(18)):
     d.line([(x, ly), (x + S(9), ly)], fill=O+(255,), width=S(3))
 plane(d, (lx0 + lx1)/2, ly, S(60), O+(255,), ang=0)
