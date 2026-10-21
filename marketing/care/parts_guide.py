@@ -115,8 +115,10 @@ def cover(out):
     cv = Image.open(os.path.join(HERE, 'parts-workshop.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS)
     shade(cv, [(lambda ys: np.clip(1 - ys/S(520), 0, 1)**1.2*0.85, DEEP), (lambda ys: np.clip((ys - S(1060))/S(260), 0, 1)*0.92, DEEP)])
     d = ImageDraw.Draw(cv); cx = W/2
-    d.text((cx, S(250)), 'متى تغيّر', font=F(AR_BLACK, S(88)), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
-    d.text((cx, S(372)), 'قطع سيارتك؟', font=F(AR_BLACK, S(112)), fill=O+(255,), anchor='ms', direction='rtl', language='ar')
+    d.text((cx, S(250)), 'متى تعمل', font=F(AR_BLACK, S(88)), fill=Wh+(255,), anchor='ms', direction='rtl', language='ar')
+    t2 = 'صيانة دورية لسيارتك؟'; s2 = S(100)
+    while w_ar(t2, F(AR_BLACK, s2)) > W - 2*M: s2 -= S(2)
+    d.text((cx, S(372)), t2, font=F(AR_BLACK, s2), fill=O+(255,), anchor='ms', direction='rtl', language='ar')
     # odometer-style subtitle chip
     t = 'دليل سريع بالكيلومترات'; fs = F(AR_BOLD, S(32)); tw = w_ar(t, fs) + S(60)
     d.rounded_rectangle((cx - tw/2, S(408), cx + tw/2, S(464)), radius=S(30), outline=O+(255,), width=S(3))
@@ -129,8 +131,11 @@ def guide(out):
     base = Image.open(os.path.join(HERE, 'parts-workshop.jpg')).convert('RGB').resize((W, H), Image.LANCZOS)
     cv = Image.blend(base.filter(ImageFilter.GaussianBlur(S(18))), Image.new('RGB', (W, H), DEEP), 0.78).convert('RGBA')
     d = ImageDraw.Draw(cv); cx = W/2
-    d.text((R_, S(220)), 'متى تغيّر', font=F(AR_BLACK, S(54)), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
-    d.text((R_ - w_ar('متى تغيّر', F(AR_BLACK, S(54))) - S(18), S(220)), 'قطع سيارتك؟', font=F(AR_BLACK, S(54)), fill=O+(255,), anchor='rs', direction='rtl', language='ar')
+    t1, t2 = 'متى تعمل', 'صيانة دورية لسيارتك؟'; hs = S(54)
+    while w_ar(t1, F(AR_BLACK, hs)) + S(18) + w_ar(t2, F(AR_BLACK, hs)) > R_ - M: hs -= S(2)
+    fh = F(AR_BLACK, hs)
+    d.text((R_, S(220)), t1, font=fh, fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
+    d.text((R_ - w_ar(t1, fh) - S(18), S(220)), t2, font=fh, fill=O+(255,), anchor='rs', direction='rtl', language='ar')
     gap = S(22); cw = (R_ - M - gap)/2; ch = S(270); top = S(270)
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); ld = ImageDraw.Draw(lay)
     cells = []
