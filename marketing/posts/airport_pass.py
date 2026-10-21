@@ -1,7 +1,7 @@
 """«من خدماتنا»: airport pickup & delivery as a boarding pass — light theme, rendered at 2160x2700.
 
-usage: python3 airport_pass.py <brand-kit dir> <out.png>
-Car: our Tiggo 8 cutout (tiggo8-cutout.png) with the logo plate, driving out of the pass.
+usage: python3 airport_pass.py <brand-kit dir> <out.png> [tiggo|orange]
+Car: our Tiggo 8 cutout (default) or the Canva orange SUV (car-orange-cutout.png), logo on the plate.
 """
 import sys, os, math
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,9 +23,14 @@ def navy_icon(im):
     return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
 
+CARS = {'tiggo': ('tiggo8-cutout.png', (241, 468, 469, 527), 560),
+        'orange': ('car-orange-cutout.png', (262, 834, 554, 942), 640)}
+CAR = CARS[sys.argv[3] if len(sys.argv) > 3 else 'tiggo']
+
+
 def plate_logo(car):
     A = np.array(car.convert('RGB')).astype(np.float32)
-    px0, py0, px1, py1 = 241, 468, 469, 527
+    px0, py0, px1, py1 = CAR[1]
     plate = tuple(int(v) for v in A[py0+4:py1-4, px0+6:px1-6].reshape(-1, 3).mean(0))
     s = 4; pl = Image.new('RGBA', ((px1-px0)*s, (py1-py0)*s), plate+(255,))
     lg = Image.open(LOGO_NAVY).convert('RGBA')
@@ -143,8 +148,8 @@ while x < bx1:
 d.text((scx, ty0 + S(412)), 'CALL & RENT', font=F(LT_TEXT, S(22)), fill=SOFTN+(255,), anchor='ms')
 
 # ---- the car drives out of the pass ----------------------------------------------------
-car = plate_logo(Image.open(os.path.join(HERE, 'tiggo8-cutout.png')).convert('RGBA'))
-cw = S(560); car = car.resize((cw, round(car.height*cw/car.width)), Image.LANCZOS)
+car = plate_logo(Image.open(os.path.join(HERE, CAR[0])).convert('RGBA'))
+cw = S(CAR[2]); car = car.resize((cw, round(car.height*cw/car.width)), Image.LANCZOS)
 cx0 = round((px + tx1)/2 - cw/2); cy1 = S(1180); cy0 = cy1 - car.height
 shd = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 ImageDraw.Draw(shd).ellipse((cx0 + S(16), cy1 - S(26), cx0 + cw - S(16), cy1 + S(20)), fill=(20, 30, 45, 140))
