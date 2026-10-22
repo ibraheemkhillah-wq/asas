@@ -1,4 +1,4 @@
-"""BMW voluntary severance programme, Oct 2026 (global news, light theme). Images: Canva AI; roundel: BMW AG; flag drawn."""
+"""BMW voluntary severance programme, Oct 2026 (global news, light theme). Images: Canva AI; roundel: BMW AG."""
 # O, Wh, LOGONAVY are provided by news_carousel when the story is loaded.
 
 NAME = "bmw-exit"
@@ -24,8 +24,7 @@ SLIDES = [
          body=[('مع إطلاق البرنامج، دخل عشرات آلاف الموظفين في وقت واحد للاطلاع على عروضهم، حتى', Wh),
                ('تعطّلت البوابة الداخلية مؤقتاً،', O), ('وأوقفت الشركة لفترة استقبال طلبات جديدة بسبب', Wh),
                ('الإقبال الكبير.', O)]),
-    dict(kind='ask', bg='bmw-exit-5.jpg', chip='شاركنا رأيك', top=230,
-         versus=dict(y=1130, left=('bmw-roundel.png', 'بي إم دبليو', 250), right=('cn', 'السيارات الصينية', 800)), lines=[
+    dict(kind='ask', bg='bmw-exit-5.jpg', chip='شاركنا رأيك', top=230, lines=[
         ('هل يكفي خفض التكاليف', LOGONAVY, 64),
         ('وتقليص الوظائف لمواجهة', LOGONAVY, 64),
         ('المنافسة الصينية؟', O, 92)]),
