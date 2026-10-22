@@ -75,13 +75,13 @@ def put(cv, im, xy):
 
 def cover(out):
     cv = page(); d = ImageDraw.Draw(cv)
-    ar(d, (W/2, S(270)), 'ماذا يعني لون', F(AR_BLACK, S(84)), N, 'ms')
-    ar(d, (W/2, S(396)), 'زيت القير؟', F(AR_BLACK, S(118)), O, 'ms')
+    ar(d, (W/2, S(236)), 'ماذا يعني لون', F(AR_BLACK, S(84)), N, 'ms')
+    ar(d, (W/2, S(408)), 'زيت القير؟', F(AR_BLACK, S(118)), O, 'ms')
     t = 'افحص العصا… واعرف حالة ناقل الحركة'; fs = F(AR_BOLD, S(30)); tw = w_ar(t, fs) + S(60)
-    d.rounded_rectangle((W/2 - tw/2, S(446), W/2 + tw/2, S(502)), radius=S(28), outline=O, width=S(3))
-    ar(d, (W/2, S(475)), t, fs, N, 'mm')
+    d.rounded_rectangle((W/2 - tw/2, S(474), W/2 + tw/2, S(528)), radius=S(28), outline=O, width=S(3))
+    ar(d, (W/2, S(502)), t, fs, N, 'mm')
     # the four sticks fanned like a colour chart, tips toward the left
-    y = S(548)
+    y = S(566)
     for name, *_ in ROWS:
         st = stick(name, S(640), 0.86); put(cv, st, ((W - st.width)//2, y)); y += S(166)
     chrome(cv, 1, 2)
