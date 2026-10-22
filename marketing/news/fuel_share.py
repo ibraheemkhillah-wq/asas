@@ -135,9 +135,9 @@ def ask(out):
     fe = F(AR_BOLD, S(30)); ew = w_ar('شاركنا رأيك', fe) + S(48)
     d.rectangle((cx - ew/2, S(230), cx + ew/2, S(288)), fill=O+(255,))
     ar(d, (cx, S(261)), 'شاركنا رأيك', fe, N+(255,), 'mm')
-    ar(d, (cx, S(400)), 'برأيك..', F(AR_BLACK, S(60)), Wh+(255,), 'ms')
-    ar(d, (cx, S(500)), 'ما السيارة التي ستقودها', F(AR_BLACK, S(70)), Wh+(255,), 'ms')
-    ar(d, (cx, S(610)), 'بعد 10 سنوات؟', F(AR_BLACK, S(100)), O+(255,), 'ms')
+    ar(d, (cx, S(400)), 'عندما تستأجر سيارة..', F(AR_BLACK, S(64)), Wh+(255,), 'ms')
+    ar(d, (cx, S(490)), 'ما الذي يهمّك أكثر؟', F(AR_BLACK, S(64)), Wh+(255,), 'ms')
+    ar(d, (cx, S(600)), 'بنزين، هايبرد أم كهرباء؟', F(AR_BLACK, S(80)), O+(255,), 'ms')
     chrome(cv, 3, 3)
     cv.convert('RGB').save(out, optimize=True); print(out, cv.size)
 
