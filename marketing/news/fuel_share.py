@@ -126,9 +126,11 @@ def data(out):
 
 
 def ask(out):
-    cv = Image.open(os.path.join(HERE, 'fuel-share-ask.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS)
+    # station photo dropped down so the question sits in its night sky and the rising price board shows below
+    ph = Image.open(os.path.join(HERE, 'fuel-share-ask.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS)
+    cv = Image.new('RGBA', (W, H), ph.getpixel((W//2, S(20)))); cv.paste(ph, (0, S(400)))
     ys = np.arange(H, dtype=np.float32)
-    for a_ in (np.clip(1 - ys/S(820), 0, 1)**1.1*0.80, np.clip((ys - S(1120))/S(200), 0, 1)*0.9):
+    for a_ in (np.clip(1 - ys/S(700), 0, 1)**1.1*0.70, np.clip((ys - S(1160))/S(160), 0, 1)*0.9):
         lay = Image.new('RGBA', (W, H), DEEP+(0,)); lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8)))
         cv.alpha_composite(lay)
     d = ImageDraw.Draw(cv); cx = W/2
