@@ -126,22 +126,24 @@ def data(out):
 
 
 def ask(out):
-    # station photo dropped down so the question sits in its night sky and the rising price board shows below
-    ph = Image.open(os.path.join(HERE, 'fuel-share-ask.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS)
-    cv = Image.new('RGBA', (W, H), ph.getpixel((W//2, S(20)))); cv.paste(ph, (0, S(400)))
+    # petrol, hybrid and EV side by side at the pumps; the question sits over the darkened canopy above them
+    # lowered so the cars sit under the text; the strip it frees is the canopy mirrored and blurred, so no flat band
+    ph = Image.open(os.path.join(HERE, 'fuel-share-ask.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS); dy = S(170)
+    cv = Image.new('RGBA', (W, H)); cv.paste(ph.crop((0, 0, W, dy)).transpose(Image.FLIP_TOP_BOTTOM).filter(ImageFilter.GaussianBlur(S(6))), (0, 0))
+    cv.paste(ph, (0, dy))
     ys = np.arange(H, dtype=np.float32)
-    for a_ in (np.clip(1 - ys/S(700), 0, 1)**1.1*0.70, np.clip((ys - S(1160))/S(160), 0, 1)*0.9):
+    for a_ in (np.clip(1 - ys/S(720), 0, 1)**0.8*0.88, np.clip((ys - S(1150))/S(170), 0, 1)*0.9):
         lay = Image.new('RGBA', (W, H), DEEP+(0,)); lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8)))
         cv.alpha_composite(lay)
     d = ImageDraw.Draw(cv); cx = W/2
     fe = F(AR_BOLD, S(30)); ew = w_ar('شاركنا رأيك', fe) + S(48)
-    d.rectangle((cx - ew/2, S(230), cx + ew/2, S(288)), fill=O+(255,))
-    ar(d, (cx, S(261)), 'شاركنا رأيك', fe, N+(255,), 'mm')
-    ar(d, (cx, S(400)), 'مع ارتفاع أسعار الوقود..', F(AR_BLACK, S(62)), Wh+(255,), 'ms')
-    ar(d, (cx, S(490)), 'هل تفضّل أن تستأجر سيارة', F(AR_BLACK, S(62)), Wh+(255,), 'ms')
+    d.rectangle((cx - ew/2, S(176), cx + ew/2, S(234)), fill=O+(255,))
+    ar(d, (cx, S(207)), 'شاركنا رأيك', fe, N+(255,), 'mm')
+    ar(d, (cx, S(330)), 'مع ارتفاع أسعار الوقود..', F(AR_BLACK, S(62)), Wh+(255,), 'ms')
+    ar(d, (cx, S(414)), 'هل تفضّل أن تستأجر سيارة', F(AR_BLACK, S(62)), Wh+(255,), 'ms')
     t3 = 'هايبرد أو كهرباء بدل البنزين؟'; f3 = S(78)
     while w_ar(t3, F(AR_BLACK, f3)) > W - 2*M: f3 -= S(2)
-    ar(d, (cx, S(600)), t3, F(AR_BLACK, f3), O+(255,), 'ms')
+    ar(d, (cx, S(512)), t3, F(AR_BLACK, f3), O+(255,), 'ms')
     chrome(cv, 3, 3)
     cv.convert('RGB').save(out, optimize=True); print(out, cv.size)
 
