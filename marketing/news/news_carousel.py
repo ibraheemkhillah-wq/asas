@@ -312,10 +312,11 @@ def ask(sl, page, total):
     """Open question, no options: one line of setup, the question in orange."""
     cv = bg(sl['bg'])
     ys = np.arange(H, dtype=np.float32); y0 = sl.get('top', 700)
+    tone = LIGHT if light() else DEEP
     for a_ in (np.clip(1-ys/240, 0, 1)**1.4*0.75,
                np.exp(-0.5*((ys-(y0+110))/190)**2)*0.82,
                np.clip((ys-1200)/150, 0, 1)*0.85):
-        lay = Image.new('RGBA', (W, H), DEEP+(0,))
+        lay = Image.new('RGBA', (W, H), tone+(0,))
         lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8))); cv.alpha_composite(lay)
     d = ImageDraw.Draw(cv)
     chrome(cv, d, page, total)
