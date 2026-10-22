@@ -33,6 +33,12 @@ def field():
     return Image.fromarray(np.clip(bg, 0, 255).astype(np.uint8)).convert('RGBA')
 
 
+def photo(name, dim=0.70):
+    """Photo backdrop, pushed toward deep navy so the data stays readable."""
+    im = Image.open(os.path.join(HERE, name)).convert('RGB').resize((W, H), Image.LANCZOS)
+    return Image.blend(im, Image.new('RGB', (W, H), DEEP), dim).convert('RGBA')
+
+
 def chrome(cv, n, total):
     d = ImageDraw.Draw(cv)
     lg = Image.open(LOGO_WHITE).convert('RGBA'); lw = S(270)
@@ -82,7 +88,7 @@ def cover(out):
 
 
 def data(out):
-    cv = field(); d = ImageDraw.Draw(cv)
+    cv = photo('fuel-share-data.jpg', 0.74); d = ImageDraw.Draw(cv)
     ar(d, (R_, S(214)), 'مبيعات السيارات الجديدة عالمياً', F(AR_BLACK, S(48)), Wh+(255,))
     ar(d, (R_, S(262)), 'النصف الأول من 2026', F(AR_BOLD, S(28)), O+(255,))
     # donut on the left, legend on the right
@@ -120,18 +126,18 @@ def data(out):
 
 
 def ask(out):
-    cv = field(); d = ImageDraw.Draw(cv); cx = W/2
+    cv = Image.open(os.path.join(HERE, 'fuel-share-ask.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS)
+    ys = np.arange(H, dtype=np.float32)
+    for a_ in (np.clip(1 - ys/S(820), 0, 1)**1.1*0.80, np.clip((ys - S(1120))/S(200), 0, 1)*0.9):
+        lay = Image.new('RGBA', (W, H), DEEP+(0,)); lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W, 1)*255).astype(np.uint8)))
+        cv.alpha_composite(lay)
+    d = ImageDraw.Draw(cv); cx = W/2
     fe = F(AR_BOLD, S(30)); ew = w_ar('شاركنا رأيك', fe) + S(48)
-    d.rectangle((cx - ew/2, S(330), cx + ew/2, S(388)), fill=O+(255,))
-    ar(d, (cx, S(361)), 'شاركنا رأيك', fe, N+(255,), 'mm')
-    ar(d, (cx, S(500)), 'في السنوات القادمة..', F(AR_BLACK, S(60)), Wh+(255,), 'ms')
-    ar(d, (cx, S(600)), 'من سيأخذ حصة أكبر', F(AR_BLACK, S(70)), Wh+(255,), 'ms')
-    ar(d, (cx, S(700)), 'من البنزين؟', F(AR_BLACK, S(96)), O+(255,), 'ms')
-    for i, (lab, col) in enumerate((('الهايبرد', MINT), ('الكهرباء', SKY))):
-        x0 = cx + (S(30) if i == 0 else -S(30) - S(380)); y0 = S(820)
-        d.rounded_rectangle((x0, y0, x0 + S(380), y0 + S(130)), radius=S(65), fill=CARD+(255,), outline=col+(255,), width=S(4))
-        ar(d, (x0 + S(190), y0 + S(68)), lab, F(AR_BLACK, S(50)), col+(255,), 'mm')
-    ar(d, (cx, S(1060)), 'اكتب اختيارك في التعليقات', F(AR_BOLD, S(30)), SOFT+(255,), 'ms')
+    d.rectangle((cx - ew/2, S(230), cx + ew/2, S(288)), fill=O+(255,))
+    ar(d, (cx, S(261)), 'شاركنا رأيك', fe, N+(255,), 'mm')
+    ar(d, (cx, S(400)), 'برأيك..', F(AR_BLACK, S(60)), Wh+(255,), 'ms')
+    ar(d, (cx, S(500)), 'ما السيارة التي ستقودها', F(AR_BLACK, S(70)), Wh+(255,), 'ms')
+    ar(d, (cx, S(610)), 'بعد 10 سنوات؟', F(AR_BLACK, S(100)), O+(255,), 'ms')
     chrome(cv, 3, 3)
     cv.convert('RGB').save(out, optimize=True); print(out, cv.size)
 
