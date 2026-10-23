@@ -170,17 +170,17 @@ SIGNS = [  # icon, title, detail
 
 def cover(out):
     cv = page()
-    top = place(cv, 'plug-1-cover.jpg', 0.68, 540, 1262)
+    top = place(cv, 'plug-1-cover.jpg', 0.62, 540, 1262)
     chrome(cv, 1); d = ImageDraw.Draw(cv)
     y = stack(d, [('شمعات الاحتراق «البواجي»', F(AR_BLACK, S(54)), N),
                   ('8 علامات', F(AR_BLACK, S(132)), O),
-                  ('تخبرك أنها تحتاج إلى تغيير', F(AR_BLACK, S(54)), N)], S(170), W/2, 'ms')
+                  ('تخبرك أنها تحتاج إلى تغيير', F(AR_BLACK, S(54)), N)], S(240), W/2, 'ms')
     t = 'اسحب لتعرفها'; fs = F(AR_BOLD, S(30)); tw = w_ar(t, fs) + S(110); c0 = y + S(34)
     d.rounded_rectangle((W/2 - tw/2, c0, W/2 + tw/2, c0 + S(60)), radius=S(30), fill=TEAL+(255,))
     ar(d, (W/2 + S(22), c0 + S(30)), t, fs, Wh, 'mm')
     ax = W/2 - tw/2 + S(38); ay = c0 + S(30)
     d.polygon([(ax, ay), (ax + S(16), ay - S(11)), (ax + S(16), ay + S(11))], fill=Wh+(255,))
-    print('cover text ends', round((c0 + S(60))/K), '| plug photo frame top', round(top), '(plug ink starts ~', round(top + 416*0.68), ')')
+    print('cover text ends', round((c0 + S(60))/K), '| plug photo frame top', round(top), '(plug ink starts ~', round(top + 416*0.62), ')')
     return cv
 
 
@@ -233,7 +233,7 @@ def when(out):
 
 
 def ask(out):
-    cv = page(); dy = S(330)
+    cv = page(); dy = S(420)
     ph = Image.open(os.path.join(HERE, 'plug-3-mechanic.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS).crop((0, 0, W, H - dy))
     a = np.clip(np.arange(ph.height, dtype=np.float32)/S(220), 0, 1)                   # feather the top edge
     ph.putalpha(Image.fromarray((np.repeat(a[:, None], W, 1)*255).astype(np.uint8)))
@@ -243,10 +243,10 @@ def ask(out):
     cv.alpha_composite(lay)
     chrome(cv, 5); d = ImageDraw.Draw(cv)
     fe = F(AR_BOLD, S(30)); ew = w_ar('شاركنا', fe) + S(52)
-    d.rectangle((W/2 - ew/2, S(170), W/2 + ew/2, S(228)), fill=O+(255,))
-    ar(d, (W/2, S(200)), 'شاركنا', fe, N, 'mm')
+    d.rectangle((W/2 - ew/2, S(250), W/2 + ew/2, S(308)), fill=O+(255,))
+    ar(d, (W/2, S(280)), 'شاركنا', fe, N, 'mm')
     y = stack(d, [('هل لاحظت إحدى هذه', F(AR_BLACK, S(70)), N), ('العلامات في سيارتك؟', F(AR_BLACK, S(80)), O),
-                  ('البواجي التالفة تزيد استهلاك الوقود وتُرهق المحرك', F(AR_BOLD, S(32)), SOFTN)], S(228) + S(10), W/2, 'ms')
+                  ('البواجي التالفة تزيد استهلاك الوقود وتُرهق المحرك', F(AR_BOLD, S(32)), SOFTN)], S(308) + S(10), W/2, 'ms')
     print('ask text ends', round(y/K))
     return cv
 
