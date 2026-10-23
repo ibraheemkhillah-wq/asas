@@ -87,14 +87,14 @@ def chassis(cv, cx, cy, s, kind, glow=True):
 
 def cover(out):
     cv = nc.bg('drive-1-cover.jpg')
-    shade(cv, [(lambda y: (1 - y/700)**1.2*0.92, DEEP), (lambda y: (y - 1020)/220*0.92, DEEP)])
+    shade(cv, [(lambda y: (1 - y/780)**1.1*0.94, DEEP), (lambda y: (y - 930)/200*0.94, DEEP)])
     d = D(cv); nc.chrome(cv, d, 1, 6); d = D(cv)
-    ar(d, (W/2, 300), 'دفع أمامي، خلفي', F(AR_BLACK, 96), Wh, 'ms')
-    ar(d, (W/2, 430), 'أم رباعي؟', F(AR_BLACK, 124), O, 'ms')
+    ar(d, (W/2, 290), 'دفع أمامي، خلفي', F(AR_BLACK, 92), Wh, 'ms')
+    ar(d, (W/2, 475), 'أم رباعي؟', F(AR_BLACK, 116), O, 'ms')
     t = 'ما الفرق بينها؟ وأيّها يناسبك؟'; fs = F(AR_BOLD, 34); tw = nc.w_ar(t, fs) + 70
-    lay, ld = layer(); ld.rounded_rectangle((W/2 - tw/2, 480, W/2 + tw/2, 540), radius=30, fill=DEEP+(200,)); cv.alpha_composite(lay); d = D(cv)
-    d.rounded_rectangle((W/2 - tw/2, 480, W/2 + tw/2, 540), radius=30, outline=O+(255,), width=3)
-    ar(d, (W/2, 511), t, fs, Wh, 'mm')
+    lay, ld = layer(); ld.rounded_rectangle((W/2 - tw/2, 560, W/2 + tw/2, 620), radius=30, fill=DEEP+(200,)); cv.alpha_composite(lay); d = D(cv)
+    d.rounded_rectangle((W/2 - tw/2, 560, W/2 + tw/2, 620), radius=30, outline=O+(255,), width=3)
+    ar(d, (W/2, 591), t, fs, Wh, 'mm')
     # three small chassis along the bottom, each with its tag
     for cx, kind, tag in ((W/2 + 320, 'fwd', 'FWD'), (W/2, 'rwd', 'RWD'), (W/2 - 320, 'awd', 'AWD')):
         chassis(cv, cx, 1112, 150, kind, glow=False)
@@ -108,32 +108,32 @@ def drive(kind, page, bgname):
     shade(cv, [(lambda y: (1 - y/260)**1.4*0.70, DEEP), (lambda y: ((y - 470)/260)**1.1*0.96, DEEP)])
     d = D(cv); nc.chrome(cv, d, page, 6); d = D(cv)
     # headline block
-    ft = F(AR_BLACK, 110); ar(d, (R_, 790), title, ft, Wh)
+    ft = F(AR_BLACK, 104); ar(d, (R_, 760), title, ft, Wh)
     tw = nc.w_ar(title, ft)
-    d.rectangle((R_ - tw*0.45, 812, R_, 822), fill=O+(255,))
-    fl = F('Oxanium-800.ttf', 54); lt(d, (M, 790), latin, fl, O)
-    ar(d, (R_, 876), line, F(AR_BOLD, 40), SOFT)
+    d.rectangle((R_ - tw*0.45, 826, R_, 834), fill=O+(255,))
+    fl = F('Oxanium-800.ttf', 54); lt(d, (M, 760), latin, fl, O)
+    ar(d, (R_, 895), line, F(AR_BOLD, 38), SOFT)
     # body: diagram card on the left, pros and cons on the right
-    top = 912; bot = 1196
+    top = 935; bot = 1200
     lay, ld = layer()
     ld.rounded_rectangle((M, top, M + 300, bot), radius=24, fill=CARD+(225,), outline=(255, 255, 255, 40), width=1)
     cv.alpha_composite(lay)
-    chassis(cv, M + 150, (top + bot)/2 + 6, 236, kind)
+    chassis(cv, M + 150, (top + bot)/2 + 20, 206, kind)
     d = D(cv); fa = F(AR_BOLD, 22); aw = nc.w_ar('الأمام', fa)
     ar(d, (M + 150 + 10, top + 28), 'الأمام', fa, SOFT, 'mm')
     tx = M + 150 - aw/2 - 6; d.polygon([(tx, top + 18), (tx - 9, top + 34), (tx + 9, top + 34)], fill=SOFT+(255,))
-    y = top + 60; fr = F(AR_BOLD, 36); x = R_
+    y = top + 56; fr = F(AR_BOLD, 34); x = R_
     for txt in pros:
         d.ellipse((x - 40, y - 30, x - 4, y + 6), fill=O+(255,))
         nc.icon_check(d, x - 22, y - 12, 30, LOGONAVY)
-        ar(d, (x - 58, y), txt, fr, Wh); y += 62
+        ar(d, (x - 58, y), txt, fr, Wh); y += 54
     for txt in cons:
         d.ellipse((x - 40, y - 30, x - 4, y + 6), outline=RED+(255,), width=3)
         nc.icon_x(d, x - 22, y - 12, 26, RED)
-        ar(d, (x - 58, y), txt, fr, SOFT); y += 62
+        ar(d, (x - 58, y), txt, fr, SOFT); y += 54
     fw = F(AR_BOLD, 28)
-    d.ellipse((R_ - 14, 1222, R_, 1236), fill=O+(255,))
-    ar(d, (R_ - 26, 1240), where, fw, SOFT)
+    d.ellipse((R_ - 14, 1228, R_, 1242), fill=O+(255,))
+    ar(d, (R_ - 26, 1246), where, fw, SOFT)
     return cv
 
 
@@ -141,35 +141,35 @@ def verdict(out_bg):
     base = nc.bg(out_bg).filter(ImageFilter.GaussianBlur(14*K))
     cv = Image.blend(base, Image.new('RGBA', (W*K, H*K), DEEP+(255,)), 0.72)
     d = D(cv); nc.chrome(cv, d, 5, 6); d = D(cv)
-    ar(d, (W/2, 250), 'الخلاصة', F(AR_BOLD, 34), O, 'ms')
-    ar(d, (W/2, 360), 'أيّها يناسبك؟', F(AR_BLACK, 100), Wh, 'ms')
+    ar(d, (W/2, 230), 'الخلاصة', F(AR_BOLD, 34), O, 'ms')
+    ar(d, (W/2, 370), 'أيّها يناسبك؟', F(AR_BLACK, 100), Wh, 'ms')
     rows = [('fwd', 'للتوفير والاستخدام اليومي', 'دفع أمامي'),
             ('rwd', 'لمتعة القيادة والتوازن', 'دفع خلفي'),
             ('awd', 'للرمل والطرق الوعرة', 'دفع رباعي')]
-    top = 430; rh = 236; gap = 24
+    top = 440; rh = 236; gap = 24
     for i, (kind, need, ans) in enumerate(rows):
         y0 = top + i*(rh + gap)
         lay, ld = layer()
         ld.rounded_rectangle((M, y0, R_, y0 + rh), radius=26, fill=CARD+(235,), outline=(255, 255, 255, 36), width=1)
         cv.alpha_composite(lay); d = D(cv)
         d.rectangle((R_ - 8, y0 + 30, R_, y0 + rh - 30), fill=O+(255,))
-        ar(d, (R_ - 44, y0 + 92), need, F(AR_BOLD, 38), SOFT)
-        fa = F(AR_BLACK, 66); ar(d, (R_ - 44, y0 + 180), ans, fa, Wh)
-        lt(d, (R_ - 44 - nc.w_ar(ans, fa) - 26, y0 + 176), TYPES[kind][1].split(' ')[0], F('Oxanium-800.ttf', 36), O, 'rs')
+        ar(d, (R_ - 44, y0 + 78), need, F(AR_BOLD, 34), SOFT)
+        fa = F(AR_BLACK, 62); ar(d, (R_ - 44, y0 + 188), ans, fa, Wh)
+        lt(d, (R_ - 44 - nc.w_ar(ans, fa) - 26, y0 + 184), TYPES[kind][1].split(' ')[0], F('Oxanium-800.ttf', 34), O, 'rs')
         chassis(cv, M + 130, y0 + rh/2, 190, kind)
     return cv
 
 
 def ask(bgname):
     cv = nc.bg(bgname)
-    shade(cv, [(lambda y: (1 - (y - 160)/680)**1.2*0.92, DEEP), (lambda y: (y - 1150)/170*0.88, DEEP)])
+    shade(cv, [(lambda y: (920 - y)/260*0.94, DEEP), (lambda y: (y - 1150)/170*0.88, DEEP)])
     d = D(cv); nc.chrome(cv, d, 6, 6); d = D(cv)
     fe = F(AR_BOLD, 30); ew = nc.w_ar('شاركنا', fe) + 52
-    d.rectangle((W/2 - ew/2, 220, W/2 + ew/2, 278), fill=O+(255,))
-    ar(d, (W/2, 250), 'شاركنا', fe, LOGONAVY, 'mm')
-    ar(d, (W/2, 420), 'وسيارتك أنت؟', F(AR_BLACK, 112), Wh, 'ms')
-    ar(d, (W/2, 530), 'دفع أمامي، خلفي أم رباعي؟', F(AR_BLACK, 68), O, 'ms')
-    ar(d, (W/2, 610), 'اكتبها في التعليقات', F(AR_BOLD, 40), SOFT, 'ms')
+    d.rectangle((W/2 - ew/2, 200, W/2 + ew/2, 258), fill=O+(255,))
+    ar(d, (W/2, 230), 'شاركنا', fe, LOGONAVY, 'mm')
+    ar(d, (W/2, 406), 'وسيارتك أنت؟', F(AR_BLACK, 108), Wh, 'ms')
+    ar(d, (W/2, 526), 'دفع أمامي، خلفي أم رباعي؟', F(AR_BLACK, 64), O, 'ms')
+    ar(d, (W/2, 616), 'اكتبها في التعليقات', F(AR_BOLD, 38), SOFT, 'ms')
     return cv
 
 
