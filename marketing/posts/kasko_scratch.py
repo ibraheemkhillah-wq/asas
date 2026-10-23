@@ -69,14 +69,25 @@ d.rounded_rectangle((R_ - tw, c0, R_, c0 + S(48)), radius=S(24), fill=O+(255,))
 d.text((R_ - tw/2, c0 + S(24)), chip, font=fc_, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
 print('sky text ends at', round((c0 + S(48))/K), '(car roof ~675)')
 
-# callout on the scratch: orange ring, short leader, label on the door panel
-sx, sy, r = S(602), S(960), S(46)
-d.ellipse((sx-r, sy-r, sx+r, sy+r), outline=O+(255,), width=S(5))
-lx, ly = S(690), S(905)
-d.line([(sx + r*0.72, sy - r*0.72), (lx, ly)], fill=O+(255,), width=S(4))
-fl = F(AR_BLACK, S(30)); lt_ = 'خدش؟'; lw3 = w_ar(lt_, fl) + S(36)
-d.rounded_rectangle((lx, ly - S(26), lx + lw3, ly + S(26)), radius=S(26), fill=O+(255,))
-ar(d, (lx + lw3/2, ly + S(1)), lt_, fl, Wh, 'mm')
+# zoom inset: a small square on the scratch, two leader lines, the same spot enlarged beside the car
+bx0, by0, bx1, by1 = S(558), S(915), S(648), S(1005)            # source square around the scratch
+src = cv.crop((bx0, by0, bx1, by1)).convert('RGB')
+ix1, iy0, isz = R_ - S(16), S(616), S(330)                    # inset box (right edge, top, size)
+ix0, iy1 = ix1 - isz, iy0 + isz
+zoom = src.resize((isz, isz), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=S(3), percent=90, threshold=2))
+sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+ImageDraw.Draw(sh).rounded_rectangle((ix0 - S(6), iy0 + S(4), ix1 + S(6), iy1 + S(14)), radius=S(26), fill=(20, 40, 60, 110))
+cv.alpha_composite(sh.filter(ImageFilter.GaussianBlur(S(14))))
+mask = Image.new('L', (isz, isz), 0); ImageDraw.Draw(mask).rounded_rectangle((0, 0, isz-1, isz-1), radius=S(20), fill=255)
+d = ImageDraw.Draw(cv)
+for (x0, y0), (x1, y1) in (((bx1, by0), (ix0 + S(8), iy1 - S(8))), ((bx0, by0), (ix0 + S(8), iy0 + S(8)))):
+    d.line([(x0, y0), (x1, y1)], fill=O+(255,), width=S(3))
+cv.paste(zoom, (ix0, iy0), mask)
+d = ImageDraw.Draw(cv)
+d.rounded_rectangle((ix0 - S(5), iy0 - S(5), ix1 + S(5), iy1 + S(5)), radius=S(24), outline=Wh+(255,), width=S(6))
+d.rounded_rectangle((ix0 - S(8), iy0 - S(8), ix1 + S(8), iy1 + S(8)), radius=S(27), outline=O+(255,), width=S(3))
+d.rectangle((bx0, by0, bx1, by1), outline=O+(255,), width=S(4))
+print('inset top', round(iy0/K), 'clears chip by', round((iy0 - S(8) - (c0 + S(48)))/K))
 
 # bottom line on the white floor
 t = 'أضِف التأمين الشامل إلى حجزك في اسطنبول'; f = F(AR_BLACK, S(38)); up, dn = ink(t, f)
