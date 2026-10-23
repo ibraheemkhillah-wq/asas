@@ -69,12 +69,11 @@ d.rounded_rectangle((R_ - tw, c0, R_, c0 + S(48)), radius=S(24), fill=O+(255,))
 d.text((R_ - tw/2, c0 + S(24)), chip, font=fc_, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
 print('sky text ends at', round((c0 + S(48))/K), '(car roof ~675)')
 
-# zoom inset: a small square on the scratch, two leader lines, the same spot enlarged beside the car
+# zoom inset: a small square on the scratch, two leader lines, a sharp close-up of that spot beside the car
 bx0, by0, bx1, by1 = S(558), S(915), S(648), S(1005)            # source square around the scratch
-src = cv.crop((bx0, by0, bx1, by1)).convert('RGB')
-ix1, iy0, isz = R_ - S(16), S(616), S(330)                    # inset box (right edge, top, size)
+ix1, iy0, isz = R_ - S(20), S(624), S(250)                    # inset box (right edge, top, size)
 ix0, iy1 = ix1 - isz, iy0 + isz
-zoom = src.resize((isz, isz), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=S(3), percent=90, threshold=2))
+zoom = Image.open(os.path.join(HERE, 'kasko-scratch-zoom.jpg')).convert('RGB').resize((isz, isz), Image.LANCZOS)   # Canva close-up of this same spot
 sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 ImageDraw.Draw(sh).rounded_rectangle((ix0 - S(6), iy0 + S(4), ix1 + S(6), iy1 + S(14)), radius=S(26), fill=(20, 40, 60, 110))
 cv.alpha_composite(sh.filter(ImageFilter.GaussianBlur(S(14))))
