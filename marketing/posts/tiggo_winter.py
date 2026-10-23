@@ -148,10 +148,13 @@ def flake_field(cv, seed, n=70, top=0, bottom=1350):
 
 
 # ---------------------------------------------------------------------------------------------------------
-def model_a():
-    cv = scene('tiggo-winter-a.jpg', 130, plate=(746, 2220))
+def model_a(bg='tiggo-winter-a.jpg', shift=130, plate=(746, 2220), roof=335*1350//600, glow=0, glow_floor=0):
+    cv = scene(bg, shift, plate=plate)
     veil(cv, lambda y: ((660 - y)/520)**0.9*0.55)                       # brighten the sky behind the type
-    veil(cv, lambda y: (y - 1150)/90*0.92)                              # white floor for dates + footer
+    veil(cv, lambda y: (y - 1150 + glow_floor)/90*0.92)                 # white floor for dates + footer
+    if glow:                                                            # soft white halo behind the type block
+        g = Image.new('L', (W, H), 0); ImageDraw.Draw(g).ellipse((S(150), S(110), S(930), S(640)), fill=int(255*glow))
+        lay = Image.new('RGBA', (W, H), (255, 255, 255, 0)); lay.putalpha(g.filter(ImageFilter.GaussianBlur(S(70)))); cv.alpha_composite(lay)
     header(cv); d = ImageDraw.Draw(cv); cx = W/2; GAP = S(26)
     # eyebrow with hairlines
     f = F(AR_BLACK, S(44)); up, dn, tw = box('عروض الشتاء', f); b = S(146) + up
@@ -172,7 +175,7 @@ def model_a():
     c0 = y + S(28); ch = up + dn + S(28)
     d.rounded_rectangle((cx - tw/2 - S(30), c0, cx + tw/2 + S(30), c0 + ch), radius=ch/2, fill=N+(255,))
     ar(d, (cx, c0 + S(14) + up), t, f, Wh)
-    print('A top block ends', round((c0 + ch)/K), '| car roof ~', 335*1350//600 - 130)
+    print('A top block ends', round((c0 + ch)/K), '| car roof ~', roof - shift)
     y2 = dates_line(d, 540, 1204)
     print('A dates', 1204, '-', round(y2))
     footer(cv)
@@ -235,5 +238,7 @@ def model_c():
 
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
-    for k, fn in (('a', model_a), ('b', model_b), ('c', model_c)):
+    # A on the snowy Istanbul waterfront (the approved layout with model B's setting)
+    a_ist = lambda: model_a('tiggo-winter-a-istanbul.jpg', 170, plate=(794, 2338), roof=385*1350//600, glow=0.55, glow_floor=40)
+    for k, fn in (('a', model_a), ('b', model_b), ('c', model_c), ('a-istanbul', a_ist)):
         cv = fn(); p = os.path.join(out, f'tiggo-winter-{k}.png'); cv.convert('RGB').save(p, optimize=True); print(p, cv.size)
