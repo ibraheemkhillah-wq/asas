@@ -2,7 +2,7 @@
 
 usage: python3 carseat_vip.py <brand-kit dir> <out.png>
 Background: Canva (carseat-vip-scene.jpg): child seat in a dark cabin, Bosphorus Bridge lights through the window,
-a blank place card on the cushion. «محجوز» is set flat and warped onto the card's measured corners.
+a blank place card on the cushion. A larger card with «محجوز» is drawn flat and warped over it.
 Vertical positions come from measured ink extents with at least 24 units clear between neighbours.
 """
 import sys, os
@@ -40,16 +40,31 @@ def perspective_coeffs(dst, src):
 
 cv = Image.open(os.path.join(HERE, 'carseat-vip-scene.jpg')).convert('RGBA').resize((W, H), Image.LANCZOS)
 
-# «محجوز» on the place card: drawn flat, then warped onto the card's corners (full-res pixels)
-quad = [(869, 1879), (1141, 1903), (1153, 2084), (846, 2055)]          # TL, TR, BR, BL
-cw, ch = 600, 400
+# «محجوز» on a larger place card: the photo's card corners, scaled up about its base so it still stands on the
+# cushion and covers the original; the card is drawn flat (paper tone, edge, text) and warped onto that quad
+quad0 = [(869, 1879), (1141, 1903), (1153, 2084), (846, 2055)]          # TL, TR, BR, BL of the photo's card
+SC = 1.55
+bxm, bym = (quad0[2][0] + quad0[3][0])/2, (quad0[2][1] + quad0[3][1])/2  # base midpoint stays put
+quad = [(bxm + (x - bxm)*SC, bym + (y - bym)*SC) for x, y in quad0]
+arr = np.asarray(cv.convert('RGB')).astype(np.float32)
+paper = tuple(int(v) for v in arr[1950:2010, 960:1040].reshape(-1, 3).mean(0))
+cw, ch = 900, 600
 flat = Image.new('RGBA', (cw, ch), (0, 0, 0, 0)); fd = ImageDraw.Draw(flat)
-fcard = F(AR_BLACK, 118); up, dn = ink('محجوز', fcard)
-base = (ch - (up + dn))//2 + up - 14
-fd.text((cw/2, base), 'محجوز', font=fcard, fill=N+(235,), anchor='ms', direction='rtl', language='ar')
-fd.rectangle((cw/2 - 70, base + dn + 26, cw/2 + 70, base + dn + 34), fill=O+(255,))
-warp = flat.transform((W, H), Image.PERSPECTIVE, perspective_coeffs(quad, [(0, 0), (cw, 0), (cw, ch), (0, ch)]), Image.BICUBIC)
+g = np.linspace(1.04, 0.90, ch)[:, None, None]                          # warm light from above, a touch darker at the base
+card = np.clip(np.array(paper, np.float32)[None, None, :]*g, 0, 255).repeat(cw, 1)
+flat.paste(Image.fromarray(card.astype(np.uint8)), (0, 0))
+fd.rectangle((0, 0, cw-1, ch-1), outline=(255, 255, 255, 120), width=3)
+fcard = F(AR_BLACK, 210); up, dn = ink('محجوز', fcard)
+base = (ch - (up + dn))//2 + up - 22
+fd.text((cw/2, base), 'محجوز', font=fcard, fill=N+(255,), anchor='ms', direction='rtl', language='ar')
+fd.rectangle((cw/2 - 110, base + dn + 36, cw/2 + 110, base + dn + 48), fill=O+(255,))
+src = [(0, 0), (cw, 0), (cw, ch), (0, ch)]
+sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))                            # soft shadow behind the card
+ImageDraw.Draw(sh).polygon([(x + 22, y + 26) for x, y in quad], fill=(0, 0, 0, 150))
+cv.alpha_composite(sh.filter(ImageFilter.GaussianBlur(26)))
+warp = flat.transform((W, H), Image.PERSPECTIVE, perspective_coeffs(quad, src), Image.BICUBIC)
 cv.alpha_composite(warp.filter(ImageFilter.GaussianBlur(0.6)))
+print('card top', round(min(y for _, y in quad)/K), 'bottom', round(max(y for _, y in quad)/K))
 
 # darken the cabin roof for the headline and the floor for the info line
 shade(cv, lambda y: ((560 - y)/300)**0.8*0.85, DEEP)
