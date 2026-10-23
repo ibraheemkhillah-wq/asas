@@ -14,11 +14,13 @@ from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
 
 tw.H = H = 1920*K
-BG, PLATE, BG_TOP = 'tiggo-winter-a-istanbul-snowy-light.jpg', (794, 2338), 330     # bg top edge, units
+BG, PLATE, BG_TOP, SC = 'tiggo-winter-a-istanbul-snowy-light.jpg', (794, 2338), 200, 1.12   # bg top edge (units), zoom
 
 
 def background():
     im = plate_logo(Image.open(os.path.join(HERE, BG)).convert('RGB').resize((W, 1350*K), Image.LANCZOS), PLATE)
+    im = im.resize((round(W*SC), round(1350*K*SC)), Image.LANCZOS)          # zoom in, crop the sides evenly
+    x0 = (im.width - W)//2; im = im.crop((x0, 0, x0 + W, im.height))
     a = np.asarray(im).astype(np.float32)
     top = S(BG_TOP)
     # sky above: the photo's own top rows, column by column, softly lightened upward
@@ -53,29 +55,29 @@ def header(cv, y0=150):
 
 def story(out):
     cv = background()
-    veil(cv, lambda y: (y - 1630)/70*0.94)                         # white floor for dates + footer
-    g = Image.new('L', (W, H), 0); ImageDraw.Draw(g).ellipse((S(110), S(290), S(970), S(1220)), fill=int(255*0.6))
+    veil(cv, lambda y: ((y - 1600)/112)**1.3*0.98)                         # white floor for dates + footer
+    g = Image.new('L', (W, H), 0); ImageDraw.Draw(g).ellipse((S(90), S(170), S(990), S(1130)), fill=int(255*0.6))
     lay = Image.new('RGBA', (W, H), (255, 255, 255, 0)); lay.putalpha(g.filter(ImageFilter.GaussianBlur(S(80)))); cv.alpha_composite(lay)
-    hb = header(cv); d = ImageDraw.Draw(cv); cx = W/2; GAP = S(32)
-    f = F(AR_BLACK, S(56)); up, dn, tw_ = box('عروض الشتاء', f); b = S(hb + 130) + up
+    hb = header(cv, 96); d = ImageDraw.Draw(cv); cx = W/2; GAP = S(32)
+    f = F(AR_BLACK, S(62)); up, dn, tw_ = box('عروض الشتاء', f); b = S(hb + 90) + up
     ar(d, (cx, b), 'عروض الشتاء', f, O)
     for sx in (-1, 1):
         x0 = cx + sx*(tw_/2 + S(26)); d.line([(x0, b - up*0.42), (x0 + sx*S(140), b - up*0.42)], fill=O+(255,), width=S(3))
     y = b + dn
-    f = F(OX6, S(42)); up, dn, _ = box(MODEL, f, False); b = y + GAP + up
+    f = F(OX6, S(44)); up, dn, _ = box(MODEL, f, False); b = y + GAP + up
     spaced(d, cx, b, MODEL, f, N, S(8)); y = b + dn
-    f = F(OX, S(196)); up, dn, _ = box('1500$', f, False); b = y + S(36) + up
+    f = F(OX, S(226)); up, dn, _ = box('1500$', f, False); b = y + S(40) + up
     lt(d, (cx, b), '1500$', f, N); y = b + dn
-    f = F(AR_BLACK, S(52)); up, dn, _ = box('للشهر كاملاً', f); b = y + GAP + up
+    f = F(AR_BLACK, S(58)); up, dn, _ = box('للشهر كاملاً', f); b = y + GAP + up
     ar(d, (cx, b), 'للشهر كاملاً', f, O); y = b + dn
-    t = '30 يوماً  ·  50$ في اليوم'; f = F(AR_BOLD, S(38)); up, dn, tw_ = box(t, f)
-    c0 = y + S(36); ch = up + dn + S(34)
+    t = '30 يوماً  ·  50$ في اليوم'; f = F(AR_BOLD, S(42)); up, dn, tw_ = box(t, f)
+    c0 = y + S(40); ch = up + dn + S(34)
     d.rounded_rectangle((cx - tw_/2 - S(38), c0, cx + tw_/2 + S(38), c0 + ch), radius=ch/2, fill=N+(255,))
     ar(d, (cx, c0 + S(17) + up), t, f, Wh)
-    print('header ends', round(hb), '| text block', round(hb + 130), '-', round((c0 + ch)/K), '| car roof ~', BG_TOP + 385*1350//600)
-    y2 = dates_line(d, 540, 1662)
-    print('dates 1662 -', round(y2), '| footer at 1740 | IG bottom zone from ~1720')
-    footer(cv, 1740)
+    print('header ends', round(hb), '| text block', round(hb + 90), '-', round((c0 + ch)/K), '| car roof ~', round(BG_TOP + 385*1350/600*SC), '| car bottom ~', round(BG_TOP + 575*1350/600*SC))
+    y2 = dates_line(d, 540, 1748)
+    print('dates 1748 -', round(y2), '| footer at 1840')
+    footer(cv, 1840)
     cv.convert('RGB').save(out, optimize=True); print(out, cv.size)
 
 
