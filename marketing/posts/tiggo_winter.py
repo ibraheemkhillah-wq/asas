@@ -238,7 +238,7 @@ def model_c():
 
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
-    # A on the snowy Istanbul waterfront (the approved layout with model B's setting), snow and frost on the car
-    a_ist = lambda: model_a('tiggo-winter-a-istanbul-snowy.jpg', 170, plate=(794, 2338), roof=385*1350//600, glow=0.55, glow_floor=40)
+    # A on the snowy Istanbul waterfront (the approved layout with model B's setting), a light dusting of snow (clean + half the snowy version's lift)
+    a_ist = lambda: model_a('tiggo-winter-a-istanbul-snowy-light.jpg', 170, plate=(794, 2338), roof=385*1350//600, glow=0.55, glow_floor=40)
     for k, fn in (('a', model_a), ('b', model_b), ('c', model_c), ('a-istanbul', a_ist)):
         cv = fn(); p = os.path.join(out, f'tiggo-winter-{k}.png'); cv.convert('RGB').save(p, optimize=True); print(p, cv.size)
