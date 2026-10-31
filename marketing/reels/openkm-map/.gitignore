@@ -1,0 +1,11 @@
+hf/fr_*/
+km/fchunks/
+km/fall.mp4
+km/*.wav
+km/*chk*.jpg
+km/*chk*.png
+km/x264*
+map/tiles/
+map/sat/
+map/lvl_*.png
+__pycache__/
