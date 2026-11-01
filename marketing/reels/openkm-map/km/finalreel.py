@@ -27,9 +27,9 @@ def scaled(im,s,cx=W/2,cy=H/2):
     w,h=W/s,H/s; return im.resize((W,H),Image.BICUBIC,box=(cx-w/2,cy-h/2,cx+w/2,cy+h/2))
 
 # ---------------- timeline (s) ----------------
-K0,K1,KOFF=0.0,4.3,0.4               # key clip 0.4..4.7
-O0,OOFF=4.3,1.9                      # office clip from 1.9 s: no unlock blink / engine thump, lights pop on, car pulls away at 2.4 s
-O1=O0+(9.3-OOFF)
+K0,K1,KOFF=0.0,3.5,0.4               # key clip 0.4..3.9 (engine catches at 2.25)
+O0,OOFF,OSPD=K1,1.9,1.3   # 1.3x faster launch;                     # office clip from 1.9 s: no unlock blink / engine thump, lights pop on, car pulls away at 2.4 s
+O1=O0+(9.3-OOFF)/OSPD
 Z0,Z1=O1,O1+6.6                      # zoom-out
 MAP_D=1.5
 PLACES=[('forest','غابة بلغراد',0.6,3.4),('sile','شيلي',0.8,3.4),('sapanca','بحيرة سابانجا',0.6,2.4),('uludag','بورصة · أولوداغ',0.0,5.0)]
@@ -107,7 +107,7 @@ def map_frame(cw,zf,n_done,frac,ret=0.0,route_a=1.0,head=True,pins_a=1.0,labels_
 OFFICE_LAST=None
 def zoom_frame(u):
     global OFFICE_LAST
-    if OFFICE_LAST is None: OFFICE_LAST=clip('office',OOFF+(O1-O0)-1/FPS)
+    if OFFICE_LAST is None: OFFICE_LAST=clip('office',OOFF+(O1-O0)*OSPD-1/FPS)
     zf=18-7.7*eio(ramp(u,1.0,5.2))
     k1=math.sin(math.pi*ramp(u,0.35,1.9)); k2=0.75*math.sin(math.pi*ramp(u,1.95,3.1)); k=max(k1,k2)
     if u<5.2:
@@ -232,7 +232,7 @@ def place_clip_frame(i,t):
 def render(f):
     t=f/FPS
     if t<K1: fr=clip('key',KOFF+t)
-    elif t<O1: fr=lights_on(clip('office',OOFF+(t-O0)),t-O0)
+    elif t<O1: fr=lights_on(clip('office',OOFF+(t-O0)*OSPD),t-O0)
     elif t<Z1: fr=zoom_frame(t-Z0)
     elif t<F0:
         for i,(m0,m1,p0,p1,k,lbl,off) in enumerate(SEGS):
@@ -284,7 +284,7 @@ def sound(FF):
     m=lvl(aload(FF,'../seat/snd/m_180.mp3',0,DUR),0.028); kk=np.minimum(1,np.arange(len(m))/SR/2.5)*np.clip((DUR-np.arange(len(m))/SR)/2.0,0,1); place(m*kk[:,None],0,1.0)
     # native, motion-synced clip audio: key clicks + engine start, unlock chirps + engine + drive-off
     place(pk(aload(FF,H_+'1-key.mp4',KOFF,K1-K0+0.15),0.55),K0,1.0,fade=0.2)
-    place(pk(aload(FF,H_+'2-office-clean.mp4',0.3,9.3),0.6)[int((OOFF-0.3)*SR):],O0-0.05,1.0,fin=0.2,fade=1.2)
+    place(pk(aload(FF,H_+'2-office-clean.mp4',0.3,9.3,af=f'atempo={OSPD}'),0.6)[int((OOFF-0.3)/OSPD*SR):],O0-0.05,1.0,fin=0.15,fade=1.0)
     # zoom-out: air rising, birds below, pin pop, title tick
     nz=noise(6.6,180,1); tt=np.arange(len(nz))/SR
     env=(0.25+0.75*np.sin(np.pi*np.clip((tt-0.35)/1.55,0,1))+0.6*np.sin(np.pi*np.clip((tt-1.95)/1.15,0,1)))*np.clip(tt/0.6,0,1)*np.clip((6.6-tt)/1.5,0,1)
@@ -294,8 +294,8 @@ def sound(FF):
         place(tone(1046,0.9,6),m1-0.35,0.05)
         PL_D=p1-p0; fi,fo=min(0.8,PL_D*0.3),min(0.9,PL_D*0.35)
         car=aload(FF,H_+CL[k]+'.mp4',off,PL_D,af='lowpass=f=700,acompressor=threshold=0.05:ratio=4:attack=20:release=300')
-        place(lvl(car,0.006),p0,1.0,fin=fi,fade=fo)                                              # the car on the road: barely there
-        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D),0.04),p0,1.0,fin=fi,fade=fo)          # waves
+        place(lvl(car,0.003 if k=='sile' else 0.006),p0,1.0,fin=fi,fade=fo)                                              # the car on the road: barely there
+        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D,af='lowpass=f=2500'),0.016),p0,1.0,fin=fi,fade=fo)   # waves, soft
         elif k=='sapanca': place(lvl(aload(FF,S+'s1194.mp3',30,PL_D),0.015),p0,1.0,fin=fi,fade=fo)    # soft lake water
         elif k=='forest': place(lvl(noise(PL_D+0.2,500,7),0.01),p0,1.0,fin=fi,fade=fo)                # leaves in the wind
         else: place(lvl(noise(PL_D+0.3,450,5),0.016),p0,1.0,fin=fi,fade=fo)                           # mountain wind
