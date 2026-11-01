@@ -36,6 +36,7 @@ class _Draw:
     def ellipse(self, box, **kw): self.d.ellipse(_sc(box), **self._kw(kw))
     def polygon(self, pts, **kw): self.d.polygon(_sc(pts), **self._kw(kw))
     def line(self, pts, **kw): self.d.line(_sc(pts), **self._kw(kw))
+    def arc(self, box, start, end, **kw): self.d.arc(_sc(box), start, end, **self._kw(kw))
 
 def hires(k=2):
     global K, F, w_ar, w_lt, Draw
