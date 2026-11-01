@@ -72,7 +72,7 @@ def attribution(fr,sat=False):
 def layer(fn):
     L=Image.new('RGBA',(W,H),(0,0,0,0)); fn(L); return L
 T_START=layer(lambda L:BD.text(L,'من هنا تبدأ الرحلة',300,76,NAVY))
-T_GO=layer(lambda L:BD.text(L,'مسارٌ لا يتوقف',300,76,NAVY))
+T_GO=layer(lambda L:BD.text(L,'مسار لا يتوقف',300,76,NAVY))
 def show(fr,L,a,rise=18):
     if a<=0: return
     fr.alpha_composite(faded(L,a),(0,int(rise*(1-a))))
@@ -165,13 +165,13 @@ def contact_layer(y,keys,t,fc,ic,isz,col=NAVY):
     g=Image.new('RGBA',(W,H),(255,255,255,0)); g.putalpha(L.split()[3].filter(ImageFilter.GaussianBlur(10)).point(lambda v:int(v*0.8)))
     out=Image.new('RGBA',(W,H),(0,0,0,0)); out.alpha_composite(g); out.alpha_composite(L); return out
 _, CITEMS, CFONT, CICONS, CISZ = contacts_big(0)
-LOGO_Y=1010
-C_LAYERS=[contact_layer(1360,k,t,CFONT,CICONS,CISZ) for k,t,_ in CITEMS[:1]]+[contact_layer(1460,k,t,CFONT,CICONS,CISZ) for k,t,_ in CITEMS[1:]]
-NOTE=layer(lambda L:BD.text(L,'خدمة العداد المفتوح وفق الشروط والأحكام',1560,30,(90,105,125),F('NotoKufiArabic-Regular.ttf',30)))
+LOGO_Y=1150
+C_LAYERS=[contact_layer(1500,k,t,CFONT,CICONS,CISZ) for k,t,_ in CITEMS[:1]]+[contact_layer(1600,k,t,CFONT,CICONS,CISZ) for k,t,_ in CITEMS[1:]]
+NOTE=layer(lambda L:BD.text(L,'خدمة العداد المفتوح وفق الشروط والأحكام',1700,30,(90,105,125),F('NotoKufiArabic-Regular.ttf',30)))
 T_END1=layer(lambda L:BD.text(L,'رحــلـة بـلا نـهايـة',150,92,NAVY))
 T_END2=layer(lambda L:BD.text(L,'عداد مفتوح',262,60,OR,F(B.AR_BOLD,60)))
 def bottom_wash(fr,a):
-    y=np.arange(H); wm=(np.clip((y-860)/260,0,1)**1.3*228)*a
+    y=np.arange(H); wm=(np.clip((y-960)/280,0,1)**1.3*228)*a
     w=Image.new('RGBA',(W,H),(255,255,255,0)); w.putalpha(Image.fromarray(np.repeat(wm[:,None],W,1).astype('uint8'))); fr.alpha_composite(w)
 def logo_in(fr,a):
     if a<=0: return
@@ -261,8 +261,8 @@ def render(f):
 
 # ---------------- sound ----------------
 SR=48000
-def aload(FF,fn,ss=None,d=None):
-    cmd=[FF,'-v','error']+(['-ss',str(ss)] if ss is not None else [])+(['-t',str(d)] if d else [])+['-i',fn,'-ac','2','-ar',str(SR),'-f','s16le','-']
+def aload(FF,fn,ss=None,d=None,af=None):
+    cmd=[FF,'-v','error']+(['-ss',str(ss)] if ss is not None else [])+(['-t',str(d)] if d else [])+['-i',fn]+(['-af',af] if af else [])+['-ac','2','-ar',str(SR),'-f','s16le','-']
     return np.frombuffer(subprocess.run(cmd,capture_output=True).stdout,'<i2').reshape(-1,2).astype(np.float32)/32768
 def lvl(x,r): return x/(np.sqrt((x**2).mean())+1e-9)*r
 def pk(x,r): return x/(np.abs(x).max()+1e-9)*r
@@ -292,11 +292,13 @@ def sound(FF):
     place(tone(880,0.35,14,(1,2)),Z0+2.3,0.05); place(tone(1320,0.25,20,(1,)),Z0+3.85,0.03)
     for i,(m0,m1,p0,p1,k,lbl,off) in enumerate(SEGS):
         place(tone(1046,0.9,6),m1-0.35,0.05)
-        PL_D=p1-p0; place(lvl(aload(FF,H_+CL[k]+'.mp4',off,PL_D),0.02),p0,1.0,fin=0.15,fade=0.3)     # the car on the road (native)
-        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D),0.07),p0,1.0,fin=0.2,fade=0.35)          # waves
-        elif k=='sapanca': place(lvl(aload(FF,S+'s1194.mp3',30,PL_D),0.025),p0,1.0,fin=0.2,fade=0.35)   # soft lake water
-        elif k=='forest': place(lvl(noise(PL_D+0.2,900,7),0.03),p0,1.0,fin=0.3,fade=0.4)               # leaves in the wind
-        else: place(lvl(noise(PL_D+0.3,600,5),0.05),p0,1.0,fin=0.3,fade=0.6)            # mountain wind
+        PL_D=p1-p0; fi,fo=min(0.8,PL_D*0.3),min(0.9,PL_D*0.35)
+        car=aload(FF,H_+CL[k]+'.mp4',off,PL_D,af='lowpass=f=700,acompressor=threshold=0.05:ratio=4:attack=20:release=300')
+        place(lvl(car,0.006),p0,1.0,fin=fi,fade=fo)                                              # the car on the road: barely there
+        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D),0.04),p0,1.0,fin=fi,fade=fo)          # waves
+        elif k=='sapanca': place(lvl(aload(FF,S+'s1194.mp3',30,PL_D),0.015),p0,1.0,fin=fi,fade=fo)    # soft lake water
+        elif k=='forest': place(lvl(noise(PL_D+0.2,500,7),0.01),p0,1.0,fin=fi,fade=fo)                # leaves in the wind
+        else: place(lvl(noise(PL_D+0.3,450,5),0.016),p0,1.0,fin=fi,fade=fo)                           # mountain wind
     place(tone(784,2.4,2.2),F0+2.4,0.08); place(tone(1175,2.0,2.8),F0+2.45,0.045)
     place(tone(523,2.2,2.0,(1,2)),F0+2.75,0.05)                                          # logo lands
     mx=np.abs(out).max(); out=out/mx*0.95 if mx>0.95 else out
