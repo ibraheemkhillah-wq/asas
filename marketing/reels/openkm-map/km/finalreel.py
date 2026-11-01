@@ -28,13 +28,14 @@ def scaled(im,s,cx=W/2,cy=H/2):
 
 # ---------------- timeline (s) ----------------
 K0,K1,KOFF=0.0,4.3,0.4               # key clip 0.4..4.7
-O0,O1,OOFF=4.3,13.3,0.3              # office clip 0.3..9.3
-Z0,Z1=13.3,19.9                      # zoom-out
-MAP_D,PL_D=1.5,3.4
-PLACES=[('forest','غابة بلغراد',0.6),('sile','شيلي',0.8),('sapanca','بحيرة سابانجا',0.5),('uludag','بورصة · أولوداغ',1.3)]
-SEGS=[]
-for i,(k,lbl,off) in enumerate(PLACES):
-    m0=Z1+i*(MAP_D+PL_D); SEGS.append((m0,m0+MAP_D,m0+MAP_D,m0+MAP_D+PL_D,k,lbl,off))
+O0,OOFF=4.3,1.9                      # office clip from 1.9 s: no unlock blink / engine thump, lights pop on, car pulls away at 2.4 s
+O1=O0+(9.3-OOFF)
+Z0,Z1=O1,O1+6.6                      # zoom-out
+MAP_D=1.5
+PLACES=[('forest','غابة بلغراد',0.6,3.4),('sile','شيلي',0.8,3.4),('sapanca','بحيرة سابانجا',0.6,2.4),('uludag','بورصة · أولوداغ',0.0,5.0)]
+SEGS=[]; m0=Z1
+for i,(k,lbl,off,d) in enumerate(PLACES):
+    SEGS.append((m0,m0+MAP_D,m0+MAP_D,m0+MAP_D+d,k,lbl,off)); m0+=MAP_D+d
 F0=SEGS[-1][3]; DUR=F0+6.0; N=int(round(DUR*FPS))
 
 # ---------------- map camera ----------------
@@ -66,11 +67,12 @@ def dive_cam(stop_ll,dz):
     sw=wpx(*stop_ll); s=2**dz; return (sw[0]-(sw[0]-REG_W[0])/s, sw[1]-(sw[1]-REG_W[1])/s), ZREG+dz
 SAT_ATTR='Esri, Maxar, Earthstar Geographics'
 def attribution(fr,sat=False):
+    return
     ImageDraw.Draw(fr).text((24,H-24),SAT_ATTR if sat else MB.ATTR,font=F(B.LT_TEXT,20),fill=(235,235,235) if sat else (140,150,160),anchor='ls')
 def layer(fn):
     L=Image.new('RGBA',(W,H),(0,0,0,0)); fn(L); return L
-T_START=layer(lambda L:BD.text(L,'من هنا تبدأ الرحلة…',300,76,NAVY))
-T_GO=layer(lambda L:BD.text(L,'والخطّ لم يتوقف',300,76,NAVY))
+T_START=layer(lambda L:BD.text(L,'من هنا تبدأ الرحلة',300,76,NAVY))
+T_GO=layer(lambda L:BD.text(L,'مسارٌ لا يتوقف',300,76,NAVY))
 def show(fr,L,a,rise=18):
     if a<=0: return
     fr.alpha_composite(faded(L,a),(0,int(rise*(1-a))))
@@ -87,8 +89,9 @@ def draw_route(fr,pts,alpha=1.0):
     L=Image.new('RGBA',(W,H),(0,0,0,0)); sh=Image.new('RGBA',(W,H),(0,0,0,0))
     ImageDraw.Draw(sh).line(pts,fill=RED+(90,),width=30,joint='curve'); L.alpha_composite(sh.filter(ImageFilter.GaussianBlur(10)))
     ImageDraw.Draw(L).line(pts,fill=RED+(255,),width=11,joint='curve'); fr.alpha_composite(faded(L,alpha))
-def map_frame(cw,zf,n_done,frac,ret=0.0,route_a=1.0,head=True,pins_a=1.0):
-    fr=view('map',cw,zf); P=projector(cw,zf); MB.labels(fr,P,('sea',))
+def map_frame(cw,zf,n_done,frac,ret=0.0,route_a=1.0,head=True,pins_a=1.0,labels_a=1.0):
+    fr=view('map',cw,zf); P=projector(cw,zf)
+    if labels_a>0: L=Image.new('RGBA',(W,H),(0,0,0,0)); MB.labels(L,P,('sea',)); fr.alpha_composite(faded(L,labels_a))
     pts=route_pts(P,n_done,frac,ret); draw_route(fr,pts,route_a)
     reached=n_done+(1 if frac>=1 else 0)
     if pins_a>0:
@@ -148,7 +151,7 @@ def pill(fr,label,a):
 LOGO=Image.open(B.LOGO_NAVY).convert('RGBA'); LW=700; LOGO=LOGO.resize((LW,int(LW*LOGO.height/LOGO.width)),Image.LANCZOS)
 def contacts_big(y,col=NAVY):
     L=Image.new('RGBA',(W,H),(0,0,0,0)); fc=F(B.CT_FONT,54); d=ImageDraw.Draw(L); isz=56
-    ic={k:BD.tint(v.split()[3],col) for k,v in B.load_icons(isz).items()}
+    ic={k:BD.tint(Image.fromarray((np.asarray(v,np.float32)[...,3]*np.asarray(v.convert('L'),np.float32)/255).astype('uint8')),col) for k,v in B.load_icons(isz).items()}
     items=[(('ig','fb'),'callrenttr'),(('wa','ph'),'+90 555 034 22 00')]
     out=[]
     for keys,t in items:
@@ -164,9 +167,9 @@ def contact_layer(y,keys,t,fc,ic,isz,col=NAVY):
 _, CITEMS, CFONT, CICONS, CISZ = contacts_big(0)
 LOGO_Y=1010
 C_LAYERS=[contact_layer(1360,k,t,CFONT,CICONS,CISZ) for k,t,_ in CITEMS[:1]]+[contact_layer(1460,k,t,CFONT,CICONS,CISZ) for k,t,_ in CITEMS[1:]]
-NOTE=layer(lambda L:BD.text(L,'خدمة الكيلومترات المفتوحة وفق الشروط والأحكام',1560,30,(90,105,125),F('NotoKufiArabic-Regular.ttf',30)))
-T_END1=layer(lambda L:BD.text(L,'رحلة… بلا نهاية',150,92,NAVY))
-T_END2=layer(lambda L:BD.text(L,'الكيلومترات مفتوحة لدينا',262,60,OR,F(B.AR_BOLD,60)))
+NOTE=layer(lambda L:BD.text(L,'خدمة العداد المفتوح وفق الشروط والأحكام',1560,30,(90,105,125),F('NotoKufiArabic-Regular.ttf',30)))
+T_END1=layer(lambda L:BD.text(L,'رحــلـة بـلا نـهايـة',150,92,NAVY))
+T_END2=layer(lambda L:BD.text(L,'عداد مفتوح',262,60,OR,F(B.AR_BOLD,60)))
 def bottom_wash(fr,a):
     y=np.arange(H); wm=(np.clip((y-860)/260,0,1)**1.3*228)*a
     w=Image.new('RGBA',(W,H),(255,255,255,0)); w.putalpha(Image.fromarray(np.repeat(wm[:,None],W,1).astype('uint8'))); fr.alpha_composite(w)
@@ -184,7 +187,7 @@ def finale_frame(v):
     else:
         a=eio(ramp(v,1.0,2.6)); cw=lerpw(REG_W,FIN_W,a); zf=ZREG
     ret=eio(ramp(v,0.35,1.1)); k=ease(ramp(v,1.1,2.4))
-    fr,P=map_frame(cw,zf,4,0,ret=ret,route_a=1-min(1,k*1.5),head=False,pins_a=1-min(1,k*1.2))
+    fr,P=map_frame(cw,zf,4,0,ret=ret,route_a=1-min(1,k*1.5),head=False,pins_a=1-min(1,k*1.2),labels_a=1-ramp(v,1.9,2.4))
     if ret<1 and v>0.35: x,y=route_pts(P,4,0,ret)[-1]; ImageDraw.Draw(fr).ellipse((x-24,y-24,x+24,y+24),fill=(255,255,255),outline=RED,width=9)
     if k>0:
         xs=[P(la,lo)[0] for _,la,lo in STOPS]+[P(*OFFICE)[0]]; ys=[P(la,lo)[1] for _,la,lo in STOPS]+[P(*OFFICE)[1]]
@@ -206,6 +209,22 @@ def finale_frame(v):
     show(fr,NOTE,ease(ramp(v,3.6,4.0)),rise=10)
     attribution(fr); return fr
 
+# ---------------- headlights switching on (first 0.7 s of the exterior) ----------------
+HL_BOXES=[(370,1370,625,1530),(88,1355,165,1465)]
+def lights_on(fr,u):
+    if u>0.7: return fr
+    a=np.asarray(fr.convert('RGB'),np.float32).copy(); k=ease(ramp(u,0.16,0.3))
+    glow=np.zeros(a.shape[:2],np.float32)
+    for x0,y0,x1,y1 in HL_BOXES:
+        reg=a[y0:y1,x0:x1]; m=np.clip((reg.mean(2)-150)/60,0,1)
+        a[y0:y1,x0:x1]=reg*(1-m*0.78*(1-k))[...,None]
+        glow[y0:y1,x0:x1]=m
+    inten=k*(0.25+0.9*np.exp(-max(0,u-0.3)*7))*(1-ramp(u,0.5,0.7))
+    if inten>0.01:
+        g=np.asarray(Image.fromarray((glow*255).astype('uint8')).filter(ImageFilter.GaussianBlur(22)),np.float32)/255*inten
+        a=a+g[...,None]*np.array([235,242,255],np.float32)*1.4
+    return Image.fromarray(np.clip(a,0,255).astype('uint8')).convert('RGBA')
+
 # ---------------- render ----------------
 def place_clip_frame(i,t):
     m0,m1,p0,p1,k,lbl,off=SEGS[i]; u=ramp(t,p0,p1)
@@ -213,7 +232,7 @@ def place_clip_frame(i,t):
 def render(f):
     t=f/FPS
     if t<K1: fr=clip('key',KOFF+t)
-    elif t<O1: fr=clip('office',OOFF+(t-O0))
+    elif t<O1: fr=lights_on(clip('office',OOFF+(t-O0)),t-O0)
     elif t<Z1: fr=zoom_frame(t-Z0)
     elif t<F0:
         for i,(m0,m1,p0,p1,k,lbl,off) in enumerate(SEGS):
@@ -223,7 +242,7 @@ def render(f):
                 else: cw,zf=REG_W,ZREG
                 frac=eio(ramp(t,m0+(0.4 if i>0 else 0.1),m1-0.35))
                 fr,_=map_frame(cw,zf,i,max(0.001,frac))
-                if i==1: show(fr,T_GO,ease(ramp(t,m0+0.4,m0+0.7)))
+                if i==2: show(fr,T_GO,ease(ramp(t,m0+0.4,m0+0.7)))
                 attribution(fr)
                 if i>0 and t<m0+0.25:                           # out of the previous place
                     prev=place_clip_frame(i-1,SEGS[i-1][3]); fr=Image.blend(prev,fr,eio(ramp(t,m0,m0+0.25)))
@@ -264,25 +283,20 @@ def sound(FF):
     S='sfx/'; H_='../hf/'
     m=lvl(aload(FF,'../seat/snd/m_180.mp3',0,DUR),0.028); kk=np.minimum(1,np.arange(len(m))/SR/2.5)*np.clip((DUR-np.arange(len(m))/SR)/2.0,0,1); place(m*kk[:,None],0,1.0)
     # native, motion-synced clip audio: key clicks + engine start, unlock chirps + engine + drive-off
-    place(pk(aload(FF,H_+'1-key.mp4',KOFF,K1-K0),0.55),K0,1.0,fade=0.08)
-    place(pk(aload(FF,H_+'2-office-clean.mp4',OOFF,O1-O0+0.6),0.6),O0,1.0,fin=0.03,fade=1.2)
+    place(pk(aload(FF,H_+'1-key.mp4',KOFF,K1-K0+0.15),0.55),K0,1.0,fade=0.2)
+    place(pk(aload(FF,H_+'2-office-clean.mp4',0.3,9.3),0.6)[int((OOFF-0.3)*SR):],O0-0.05,1.0,fin=0.2,fade=1.2)
     # zoom-out: air rising, birds below, pin pop, title tick
-    place(lvl(aload(FF,S+'s2472.mp3',20,3.0),0.04),Z0-0.6,1.0,fin=0.6,fade=1.2)
     nz=noise(6.6,180,1); tt=np.arange(len(nz))/SR
     env=(0.25+0.75*np.sin(np.pi*np.clip((tt-0.35)/1.55,0,1))+0.6*np.sin(np.pi*np.clip((tt-1.95)/1.15,0,1)))*np.clip(tt/0.6,0,1)*np.clip((6.6-tt)/1.5,0,1)
     place(lvl(nz,0.05)*env[:,None],Z0,1.0)
     place(tone(880,0.35,14,(1,2)),Z0+2.3,0.05); place(tone(1320,0.25,20,(1,)),Z0+3.85,0.03)
-    pencil=lvl(aload(FF,S+'s3194.mp3'),0.045)
     for i,(m0,m1,p0,p1,k,lbl,off) in enumerate(SEGS):
-        d0=m0+(0.4 if i>0 else 0.1); place(pencil,d0,1.0,fade=0.15,dur=max(0.3,m1-0.35-d0))
         place(tone(1046,0.9,6),m1-0.35,0.05)
-        place(lvl(aload(FF,H_+CL[k]+'.mp4',off,PL_D),0.02),p0,1.0,fin=0.15,fade=0.3)     # the car on the road (native)
-        amb={'forest':[(S+'s2472.mp3',40,0.05)],'sile':[(S+'s1194.mp3',10,0.07)],'sapanca':[(S+'s2472.mp3',60,0.03),(S+'s1194.mp3',30,0.025)]}.get(k)
-        if amb:
-            for fn,ss,g in amb: place(lvl(aload(FF,fn,ss,PL_D),g),p0,1.0,fin=0.2,fade=0.35)
+        PL_D=p1-p0; place(lvl(aload(FF,H_+CL[k]+'.mp4',off,PL_D),0.02),p0,1.0,fin=0.15,fade=0.3)     # the car on the road (native)
+        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D),0.07),p0,1.0,fin=0.2,fade=0.35)          # waves
+        elif k=='sapanca': place(lvl(aload(FF,S+'s1194.mp3',30,PL_D),0.025),p0,1.0,fin=0.2,fade=0.35)   # soft lake water
+        elif k=='forest': place(lvl(noise(PL_D+0.2,900,7),0.03),p0,1.0,fin=0.3,fade=0.4)               # leaves in the wind
         else: place(lvl(noise(PL_D+0.3,600,5),0.05),p0,1.0,fin=0.3,fade=0.6)            # mountain wind
-    place(pencil,F0+0.35,1.0,fade=0.15,dur=0.75)
-    place(np.concatenate([pencil,pencil]),F0+1.1,1.0,fade=0.25,dur=1.3)                   # ∞ drawing
     place(tone(784,2.4,2.2),F0+2.4,0.08); place(tone(1175,2.0,2.8),F0+2.45,0.045)
     place(tone(523,2.2,2.0,(1,2)),F0+2.75,0.05)                                          # logo lands
     mx=np.abs(out).max(); out=out/mx*0.95 if mx>0.95 else out
