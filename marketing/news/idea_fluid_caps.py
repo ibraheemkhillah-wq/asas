@@ -78,37 +78,46 @@ def page():
 
 
 def product(cv, name, cx, cy, size, glow):
-    """The reservoir shot, feathered with a radial mask; a faint glow of the fluid colour behind it."""
-    g, gd = layer(); gd.ellipse((cx - size*0.36, cy - size*0.30, cx + size*0.36, cy + size*0.36), fill=glow+(70,))
-    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(40*K)))
-    s = round(size*K)
-    src = Image.open(os.path.join(HERE, name)).convert('RGB'); c = round(src.width*0.13)   # trim the empty backdrop
-    im = src.crop((c, c, src.width - c, src.height - c)).resize((s, s), Image.LANCZOS)
-    yy, xx = np.mgrid[0:s, 0:s].astype(np.float32)/s - 0.5
-    r = np.sqrt(xx**2 + yy**2)
-    m = np.clip((0.50 - r)/0.12, 0, 1)**1.4
-    im = im.convert('RGBA'); im.putalpha(Image.fromarray((m*255).astype(np.uint8)))
-    cv.alpha_composite(im, (round((cx - size/2)*K), round((cy - size/2)*K)))
+    """A transparent cutout fitted inside a size x size box, with a fluid-coloured glow and a soft floor shadow."""
+    im = Image.open(os.path.join(HERE, name)).convert('RGBA')
+    sc = min(size*K/im.width, size*K/im.height); w, h = round(im.width*sc), round(im.height*sc)
+    im = im.resize((w, h), Image.LANCZOS)
+    if name == 'cut-oil.png':                                  # the oil shot is cropped by its frame: fade that edge
+        a = np.asarray(im.getchannel('A')).astype(np.float32)
+        a *= np.clip((h - np.arange(h, dtype=np.float32))/(h*0.28), 0, 1)[:, None]
+        im.putalpha(Image.fromarray(a.astype(np.uint8)))
+    x0, y0 = round(cx*K - w/2), round(cy*K - h/2)
+    g, gd = layer(); gd.ellipse((cx - size*0.40, cy - size*0.34, cx + size*0.40, cy + size*0.34), fill=glow+(80,))
+    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(44*K)))
+    sh, sd = layer(); by = (y0 + h)/K
+    sd.ellipse((cx - w/K*0.36, by - 18, cx + w/K*0.36, by + 14), fill=(0, 0, 0, 170))
+    cv.alpha_composite(sh.filter(ImageFilter.GaussianBlur(12*K)))
+    cv.alpha_composite(im, (x0, y0))
 
 
 CAPS = [  # photo, glow colour, name, what it does, tip
-    ('res-oil.jpg', (200, 150, 40), 'زيت المحرك', 'يزيّت أجزاء المحرك ويقلّل الاحتكاك', 'افحص مستواه بالعصا مرة كل شهر'),
-    ('res-cool.jpg', (236, 92, 120), 'سائل التبريد', 'يحافظ على حرارة المحرك ضمن الحد الطبيعي', 'لا تفتح غطاءه والمحرك ساخن'),
-    ('res-brake.jpg', (226, 176, 60), 'سائل الفرامل', 'ينقل ضغط الدواسة إلى نظام الفرامل', 'يُغيَّر حسب الموعد في دليل سيارتك'),
-    ('res-washer.jpg', (52, 132, 220), 'سائل المساحات', 'لتنظيف الزجاج الأمامي ووضوح الرؤية', 'استخدم سائلاً لا يتجمّد في الشتاء'),
-    ('res-steer.jpg', (190, 200, 70), 'زيت الباور', 'يشغّل نظام التوجيه الهيدروليكي', 'سيارات حديثة كثيرة توجيهها كهربائي بلا خزان'),
+    ('cut-oil.png', (200, 150, 40), 'زيت المحرك', 'يزيّت أجزاء المحرك ويقلّل الاحتكاك', 'افحص مستواه بالعصا مرة كل شهر'),
+    ('cut-cool.png', (236, 92, 120), 'سائل التبريد', 'يحافظ على حرارة المحرك ضمن الحد الطبيعي', 'لا تفتح غطاءه والمحرك ساخن'),
+    ('cut-brake.png', (226, 176, 60), 'سائل الفرامل', 'ينقل ضغط الدواسة إلى نظام الفرامل', 'يُغيَّر حسب الموعد في دليل سيارتك'),
+    ('cut-washer.png', (52, 132, 220), 'سائل المساحات', 'لتنظيف الزجاج الأمامي ووضوح الرؤية', 'استخدم سائلاً لا يتجمّد في الشتاء'),
+    ('cut-steer.png', (190, 200, 70), 'زيت الباور', 'يشغّل نظام التوجيه الهيدروليكي', 'سيارات حديثة كثيرة توجيهها كهربائي بلا خزان'),
 ]
 
 
 def item(cv, i, num, it, top, bh):
     """One band: photo on the right for even rows, left for odd; text block centred vertically beside it."""
     photo, glow, name, what, tip = it
-    right = i % 2 == 0; size = bh + 30; cy = top + bh/2
+    right = i % 2 == 0; size = bh - 10; cy = top + bh/2
     pcx = R_ - size/2 + 30 if right else M + size/2 - 30
+    sx = np.arange(W*K, dtype=np.float32)/K                       # darken the text side of this band
+    side = np.clip(((pcx - size/2 + 40) - sx)/260, 0, 1) if right else np.clip((sx - (pcx + size/2 - 40))/260, 0, 1)
+    ys = np.arange(H*K, dtype=np.float32)/K; band = np.clip(1 - np.abs(ys - cy)/(bh*0.62), 0, 1)**0.7
+    a = (band[:, None]*side[None, :]*0.55*255).astype(np.uint8)
+    lay = Image.new('RGBA', (W*K, H*K), DEEP+(0,)); lay.putalpha(Image.fromarray(a)); cv.alpha_composite(lay)
     product(cv, photo, pcx, cy, size, glow)
     d = D(cv)
-    tx = (pcx - size/2 + 10) if right else R_                     # right edge of the text column
-    tl = M if right else (pcx + size/2 - 10)                      # left edge
+    tx = (pcx - size/2 - 20) if right else R_                     # right edge of the text column
+    tl = M if right else (pcx + size/2 + 20)                      # left edge
     maxw = tx - tl
     fn, f1, f2, f3 = F('Oxanium-800.ttf', 34), F(AR_BLACK, 46), F(AR_BOLD, 28), F(AR_BOLD, 26)
     rows = [(f'{num:02d}', fn, O, 'num'), (name, f1, Wh, 'name')]
@@ -145,7 +154,7 @@ def tips_box(cv, top, title_, lines_):
     u0, d0 = ink(title_, f0); hs = [ink(t, f1) for t in lines_]
     h = pad + u0 + d0 + sum(22 + u + dd for u, dd in hs) + pad
     lay, ld = layer()
-    ld.rounded_rectangle((M, top, R_, top + h), radius=28, fill=IDEA+(120,), outline=(255, 255, 255, 46), width=1)
+    ld.rounded_rectangle((M, top, R_, top + h), radius=28, fill=(10, 30, 52, 215), outline=(255, 255, 255, 46), width=1)
     cv.alpha_composite(lay); d = D(cv)
     d.rectangle((R_ - 8, top + 28, R_, top + h - 28), fill=O+(255,))
     b = top + pad + u0; ar(d, (R_ - 40, b), title_, f0, Wh); y = b + d0
@@ -156,8 +165,14 @@ def tips_box(cv, top, title_, lines_):
     return top + h
 
 
-def caps_slide(n, label, title, items, first, bh, note=None):
-    cv = page(); d = D(cv); nc.chrome(cv, d, n, TOTAL); d = D(cv)
+def scene(name, items_top, bh, count):
+    cv = nc.bg(name)
+    shade(cv, [(lambda y: np.full_like(y, 0.55), DEEP), (lambda y: (1 - y/420)*0.5, DEEP), (lambda y: (y - 1150)/150*0.85, DEEP)])
+    return cv
+
+
+def caps_slide(n, label, title, items, first, bh, bg, note=None):
+    cv = scene(bg, 0, bh, len(items)); d = D(cv); nc.chrome(cv, d, n, TOTAL); d = D(cv)
     y = stack(d, [(label, F(AR_BOLD, 30), O), (title, F(AR_BLACK, 62), Wh)], 160, R_, 'rs', gap=24)
     top = y + 34
     for i, it in enumerate(items):
@@ -200,8 +215,8 @@ def ask():
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
     slides = [cover(),
-              caps_slide(2, 'تحت الكبوت', 'السوائل الأساسية', CAPS[:3], 1, 300),
-              caps_slide(3, 'تحت الكبوت', 'سوائل لا تنسَها', CAPS[3:], 4, 312,
+              caps_slide(2, 'تحت الكبوت', 'السوائل الأساسية', CAPS[:3], 1, 300, 'caps-bg2.jpg'),
+              caps_slide(3, 'تحت الكبوت', 'سوائل لا تنسَها', CAPS[3:], 4, 312, 'caps-bg3.jpg',
                          note=('قبل أن تفتح أي غطاء', ['افحص السوائل والمحرك بارد والسيارة على أرض مستوية',
                                                        'لا تخلط السوائل ببعضها، فلكل غطاء سائله فقط',
                                                        'إذا انخفض أي سائل بسرعة، افحص السيارة عند فني مختص'])),
