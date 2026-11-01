@@ -27,8 +27,8 @@ def scaled(im,s,cx=W/2,cy=H/2):
     w,h=W/s,H/s; return im.resize((W,H),Image.BICUBIC,box=(cx-w/2,cy-h/2,cx+w/2,cy+h/2))
 
 # ---------------- timeline (s) ----------------
-K0,K1,KOFF=0.0,3.5,0.4               # key clip 0.4..3.9 (engine catches at 2.25)
-O0,OOFF,OSPD=K1,1.9,1.3   # 1.3x faster launch;                     # office clip from 1.9 s: no unlock blink / engine thump, lights pop on, car pulls away at 2.4 s
+K0,K1,KOFF=0.0,2.8,0.4               # key clip 0.4..3.2 (engine catches at 2.25, cut right after)
+O0,OOFF,OSPD=K1,2.1,1.8   # 1.8x faster launch;                     # office clip from 1.9 s: no unlock blink / engine thump, lights pop on, car pulls away at 2.4 s
 O1=O0+(9.3-OOFF)/OSPD
 Z0,Z1=O1,O1+6.6                      # zoom-out
 MAP_D=1.5
@@ -212,14 +212,14 @@ def finale_frame(v):
 # ---------------- headlights switching on (first 0.7 s of the exterior) ----------------
 HL_BOXES=[(370,1370,625,1530),(88,1355,165,1465)]
 def lights_on(fr,u):
-    if u>0.7: return fr
-    a=np.asarray(fr.convert('RGB'),np.float32).copy(); k=ease(ramp(u,0.16,0.3))
+    if u>0.45: return fr
+    a=np.asarray(fr.convert('RGB'),np.float32).copy(); k=ease(ramp(u,0.05,0.13))
     glow=np.zeros(a.shape[:2],np.float32)
     for x0,y0,x1,y1 in HL_BOXES:
         reg=a[y0:y1,x0:x1]; m=np.clip((reg.mean(2)-150)/60,0,1)
         a[y0:y1,x0:x1]=reg*(1-m*0.78*(1-k))[...,None]
         glow[y0:y1,x0:x1]=m
-    inten=k*(0.25+0.9*np.exp(-max(0,u-0.3)*7))*(1-ramp(u,0.5,0.7))
+    inten=k*(0.25+0.9*np.exp(-max(0,u-0.13)*9))*(1-ramp(u,0.3,0.45))
     if inten>0.01:
         g=np.asarray(Image.fromarray((glow*255).astype('uint8')).filter(ImageFilter.GaussianBlur(22)),np.float32)/255*inten
         a=a+g[...,None]*np.array([235,242,255],np.float32)*1.4
@@ -294,11 +294,11 @@ def sound(FF):
         place(tone(1046,0.9,6),m1-0.35,0.05)
         PL_D=p1-p0; fi,fo=min(0.8,PL_D*0.3),min(0.9,PL_D*0.35)
         car=aload(FF,H_+CL[k]+'.mp4',off,PL_D,af='lowpass=f=700,acompressor=threshold=0.05:ratio=4:attack=20:release=300')
-        place(lvl(car,0.003 if k=='sile' else 0.006),p0,1.0,fin=fi,fade=fo)                                              # the car on the road: barely there
-        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D,af='lowpass=f=2500'),0.016),p0,1.0,fin=fi,fade=fo)   # waves, soft
-        elif k=='sapanca': place(lvl(aload(FF,S+'s1194.mp3',30,PL_D),0.015),p0,1.0,fin=fi,fade=fo)    # soft lake water
-        elif k=='forest': place(lvl(noise(PL_D+0.2,500,7),0.01),p0,1.0,fin=fi,fade=fo)                # leaves in the wind
-        else: place(lvl(noise(PL_D+0.3,450,5),0.016),p0,1.0,fin=fi,fade=fo)                           # mountain wind
+        place(lvl(car,0.0012),p0,1.0,fin=fi,fade=fo)                                              # the car on the road: barely there
+        if k=='sile': place(lvl(aload(FF,S+'s1194.mp3',10,PL_D,af='lowpass=f=2000'),0.006),p0,1.0,fin=fi,fade=fo)   # waves, soft
+        elif k=='sapanca': place(lvl(aload(FF,S+'s1194.mp3',30,PL_D,af='lowpass=f=2000'),0.004),p0,1.0,fin=fi,fade=fo)    # soft lake water
+        elif k=='forest': place(lvl(noise(PL_D+0.2,500,7),0.004),p0,1.0,fin=fi,fade=fo)                # leaves in the wind
+        else: place(lvl(noise(PL_D+0.3,450,5),0.005),p0,1.0,fin=fi,fade=fo)                           # mountain wind
     place(tone(784,2.4,2.2),F0+2.4,0.08); place(tone(1175,2.0,2.8),F0+2.45,0.045)
     place(tone(523,2.2,2.0,(1,2)),F0+2.75,0.05)                                          # logo lands
     mx=np.abs(out).max(); out=out/mx*0.95 if mx>0.95 else out
