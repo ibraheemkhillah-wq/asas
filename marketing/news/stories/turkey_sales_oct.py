@@ -5,7 +5,7 @@ NAME = "turkey-sales-oct"
 THEME = "light"
 SOURCE = "المصدر: جمعية موزعي السيارات في تركيا ODMD"
 SLIDES = [
-    dict(kind='cover', bg='tr-sales-1-cover.jpg', mark='flag-turkey.png', mark_w=200, stack=[
+    dict(kind='cover', bg='tr-sales-1-cover.jpg', stack=[
         ('مبيعات السيارات في تركيا', LOGONAVY, Wh, 60),
         ('تتراجع 30.8%', Wh, LOGONAVY, 84),
         ('في أكتوبر 2026', O, LOGONAVY, 70)]),
