@@ -7,3 +7,4 @@
 - Before sending, check every slide at full size for touching or overlapping text, lines cutting through letters, and labels sitting on drawings.
 - All Arabic copy (on the design and in captions, headlines included) is clear Modern Standard "white" Arabic that every Arab reader understands: no colloquial or dialect words or phrasing.
 - The brand kit lives in `marketing/brand-kit` (pass it as the first argument to every render script). Fonts: Noto Kufi Arabic from the full Google Fonts build (the Noto Arabic-only build lacks Latin punctuation).
+- Top text blocks sit LOW (recurring feedback "النص مرتفع"): leave clear air under the logo/badge row. On cover and question slides start the first text line around y=320-380 (1080 units), never right under the header, and avoid big empty space at the bottom.
