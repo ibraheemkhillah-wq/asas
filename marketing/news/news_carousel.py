@@ -347,8 +347,8 @@ def ask(sl, page, total):
     ys = np.arange(H*K, dtype=np.float32)/K; y0 = sl.get('top', 700)
     tone = LIGHT if light() else DEEP
     for a_ in (np.clip(1-ys/240, 0, 1)**1.4*0.75,
-               np.exp(-0.5*((ys-(y0+110))/190)**2)*0.82,
-               np.clip((ys-1200)/150, 0, 1)*0.85):
+               np.exp(-0.5*((ys-(y0+(170 if light() else 110)))/(240 if light() else 190))**2)*(0.88 if light() else 0.82),
+               np.clip((ys-(1130 if light() else 1200))/150, 0, 1)*(0.96 if light() else 0.85)):
         lay = Image.new('RGBA', (W*K, H*K), tone+(0,))
         lay.putalpha(Image.fromarray((np.repeat(a_[:, None], W*K, 1)*255).astype(np.uint8))); cv.alpha_composite(lay)
     d = Draw(cv)
@@ -356,11 +356,15 @@ def ask(sl, page, total):
     fe = F(AR_BOLD, 30); ew = w_ar(sl['chip'], fe) + 48; eh = 58
     d.rectangle((W/2-ew/2, y0-eh-40, W/2+ew/2, y0-40), fill=O+(255,))
     d.text((W/2, y0-40-eh/2+2), sl['chip'], font=fe, fill=LOGONAVY+(255,), anchor='mm', direction='rtl', language='ar')
-    y = y0
+    y = y0; prev_dn = None
     for txt, col, size in sl['lines']:
         while w_ar(txt, F(AR_BLACK, size)) > W - 2*M: size -= 2
-        y += round(size*1.25)
-        d.text((W/2, y), txt, font=F(AR_BLACK, size), fill=col+(255,), anchor='ms', direction='rtl', language='ar')
+        f = F(AR_BLACK, size)
+        bb = _m.textbbox((0, 0), txt, font=getattr(f, 'real', f), anchor='ls', direction='rtl', language='ar')
+        up, dn = -bb[1]/K, bb[3]/K                          # measured ink above / below the baseline
+        y = round(size*1.25) + y if prev_dn is None else y + prev_dn + 26 + up
+        d.text((W/2, y), txt, font=f, fill=col+(255,), anchor='ms', direction='rtl', language='ar')
+        prev_dn = dn
     if sl.get('versus'):
         versus(cv, sl['versus'])
     source_line(Draw(cv), W/2, 1245, anchor='ms')
