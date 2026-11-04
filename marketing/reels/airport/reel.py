@@ -20,14 +20,14 @@ def zoom(im,s):
     w,h=W/s,H/s; return im.resize((W,H),Image.BICUBIC,box=((W-w)/2,(H-h)/2,(W+w)/2,(H+h)/2))
 # (timeline start, end, clip, clip-time at start, speed, zoom group)
 EDL=[(0.0, 5.0,'1v2',0.0,1.0,'A'),   # carousel: belt carries the bags, tray arrives
-     (5.0, 7.0,'2',  0.3,1.5,'A'),   # same take continues: hand from the right takes the key (sped up to 2 s)
-     (7.0, 9.5,'3',  1.2,1.0,'B'),   # unlock press lands at ~9.2
-     (9.5,13.0,'4',  0.0,1.0,'C'),   # car answers: indicators flash on the hit
-     (13.0,16.0,'5', 0.3,1.0,'D'),   # traveller walks to the car
-     (16.0,19.0,'6v2',1.6,1.0,'E'),  # bag in, tailgate shuts (~18.6) — first second skipped
-     (19.0,22.5,'7', 0.0,1.0,'F')]   # drive away; the same shot keeps running under the end card
-FIN=22.5; DUR=26.5; N=int(DUR*FPS); HIT=9.5
-ZG={'A':(0.0,7.0,0.035),'B':(7.0,9.5,0.025),'C':(9.5,13.0,0.025),'D':(13.0,16.0,0.025),'E':(16.0,19.0,0.025),'F':(19.0,DUR,0.06)}
+     (5.0, 6.5,'2',  0.3,2.0,'A'),   # same take continues: hand from the right takes the key (2x, 1.5 s)
+     (6.5, 9.0,'3',  1.2,1.0,'B'),   # unlock press lands at ~8.7
+     (9.0,12.5,'4',  0.0,1.0,'C'),   # car answers: indicators flash on the hit
+     (12.5,15.5,'5', 0.3,1.0,'D'),   # traveller walks to the car
+     (15.5,18.5,'6v2',1.6,1.0,'E'),  # bag in, tailgate shuts — first second skipped
+     (18.5,22.0,'7', 0.0,1.0,'F')]   # drive away; the same shot keeps running under the end card
+FIN=22.0; DUR=26.0; N=int(DUR*FPS); HIT=9.0
+ZG={'A':(0.0,6.5,0.035),'B':(6.5,9.0,0.025),'C':(9.0,12.5,0.025),'D':(12.5,15.5,0.025),'E':(15.5,18.5,0.025),'F':(18.5,DUR,0.06)}
 def zf(g,t):
     a,b,k=ZG[g]; return 1.0+k*np.clip((t-a)/(b-a),0,1)
 XF=0.3                                    # dissolve 1->2 so the carousel reads as one take
@@ -35,10 +35,11 @@ def layer(fn):
     L=Image.new('RGBA',(W,H),(0,0,0,0)); fn(L); return L
 HOOK1=layer(lambda L:text(L,'أوّل ما يصلك في المطار',240,72))
 HOOK2=layer(lambda L:text(L,'ليس حقيبتك',360,100,OR))
-E1=layer(lambda L:text(L,'حقيبتك تأخّرت؟',470,84))
+T1='حــقــيــبــتــك تــأخــرت؟'; T2='ســيــارتــك لا!'
+E1=layer(lambda L:text(L,T1,560,84))
 E2_Y=690; E2_FONT=F(B.AR_BLACK,124)
-E2=layer(lambda L:text(L,'سيارتك لا !',E2_Y,124,OR,E2_FONT))
-E3=layer(lambda L:text(L,'استلام وتسليم في المطار',960,52,(225,230,238),F(B.AR_BOLD,52)))
+E2=layer(lambda L:text(L,T2,E2_Y,124,OR,E2_FONT))
+E3=layer(lambda L:text(L,'استلام وتسليم في المطار',930,52,(225,230,238),F(B.AR_BOLD,52)))
 LOGO_Y=1180
 LOGO=layer(lambda L:logo(L,LOGO_Y)); _lh=Image.open(B.LOGO_WHITE).size; LH=int(620*_lh[1]/_lh[0])
 CONT=layer(lambda L:contacts(L,LOGO_Y+LH+100))
@@ -67,7 +68,7 @@ def brush(w,h,seed=7):
     rgb=np.array([214,22,34],np.float32)*shade_*(0.92+0.08*r.random((h,w,1)))
     im=Image.fromarray(np.dstack([rgb,a*255]).clip(0,255).astype('uint8'),'RGBA')
     return im.transpose(Image.FLIP_LEFT_RIGHT)                  # heavy start on the right (Arabic reading)
-E2W=sb.tw('سيارتك لا !',E2_FONT)
+E2W=sb.tw(T2,E2_FONT)
 BR=brush(int(E2W*1.22),96)
 BR_X=int((W-BR.width)/2); BR_Y=E2_Y+74
 def brush_at(fr,p):
@@ -88,6 +89,39 @@ def pop(fr,L,p,cy):
     cw,ch=int(W*s),int(240*s); c=crop.resize((cw,ch),Image.LANCZOS)
     c=faded(c,min(1,p*2.2))
     fr.alpha_composite(c,(int((W-cw)/2),int(cy-ch/2)))
+HV=0.85                                    # «سيارتك لا!» impact time inside the end card
+_r=np.random.default_rng(21)
+SPLAT=[(BR_X+BR.width*float(u),BR_Y+BR.height*0.5+float(_r.normal(0,46)),float(_r.uniform(3,11)),float(u)) for u in _r.uniform(0,1,46)]
+def glow_layer(a):
+    L=Image.new('RGBA',(W,H),(0,0,0,0)); g=Image.new('L',(W,H),0)
+    from PIL import ImageDraw
+    ImageDraw.Draw(g).ellipse((W/2-460,E2_Y-150,W/2+460,E2_Y+150),fill=int(255*a))
+    L.putalpha(g.filter(ImageFilter.GaussianBlur(70))); L2=Image.new('RGBA',(W,H),(230,40,40,255)); L2.putalpha(L.split()[3]); return L2
+GLOW=glow_layer(1.0)
+def splat_at(fr,p):
+    if p<=0: return
+    from PIL import ImageDraw
+    L=Image.new('RGBA',(W,H),(0,0,0,0)); d=ImageDraw.Draw(L)
+    for x,y,rr,u in SPLAT:
+        if (1-u)<=p:                                   # droplets appear as the stroke passes (right-to-left)
+            d.ellipse((x-rr,y-rr,x+rr,y+rr),fill=(206,24,36,230))
+    fr.alpha_composite(L)
+def punch(fr,L,p,cy):
+    """slam in: 1.9x -> 0.96x -> 1.0x"""
+    if p<=0: return
+    if p>=1: fr.alpha_composite(L); return
+    q=min(1,p/0.55); s=1.9-0.94*ease(q) if p<0.55 else 0.96+0.04*ease((p-0.55)/0.45)
+    crop=L.crop((0,int(cy-130),W,int(cy+130)))
+    cw,ch=int(W*s),int(260*s); c=crop.resize((cw,ch),Image.LANCZOS)
+    if p<0.4: c=c.filter(ImageFilter.GaussianBlur(6*(1-p/0.4)))
+    c=faded(c,min(1,p*3))
+    fr.alpha_composite(c,(int((W-cw)/2),int(cy-ch/2)))
+def shake(fr,v):
+    d=v-HV
+    if d<0 or d>0.35: return fr
+    amp=22*np.exp(-d*11); r=np.random.default_rng(int(d*1000))
+    dx,dy=int(r.normal(0,amp)),int(r.normal(0,amp*0.6))
+    out=Image.new('RGBA',(W,H),(0,0,0,255)); out.alpha_composite(zoom(fr,1.04),(dx,dy)); return out
 LAST7=None
 def clip_at(c,ct):
     global LAST7
@@ -105,28 +139,37 @@ def render(f):
         a2,b2,c2,c02,sp2,g2=EDL[1]
         nxt=zoom(clip(c2,c02),zf('A',t)); fr=Image.blend(fr,nxt,eio(ramp(t,5.0-XF,5.0)))
     if c in ('1v2','2'):
-        ha=ease(ramp(t,3.0,3.5))*(1-ramp(t,6.3,6.8))
+        ha=ease(ramp(t,3.0,3.5))*(1-ramp(t,5.8,6.3))
         if ha>0:
             sh=fr.copy(); shade(sh,top=560); fr=Image.blend(fr,sh,ha)
-            show(fr,HOOK1,ease(ramp(t,3.0,3.5))*(1-ramp(t,6.3,6.8)))
-            show(fr,HOOK2,ease(ramp(t,3.7,4.2))*(1-ramp(t,6.3,6.8)))
+            show(fr,HOOK1,ease(ramp(t,3.0,3.5))*(1-ramp(t,5.8,6.3)))
+            show(fr,HOOK2,ease(ramp(t,3.7,4.2))*(1-ramp(t,5.8,6.3)))
     if t<0.35: fr=Image.blend(Image.new('RGBA',(W,H),(0,0,0,255)),fr,ramp(t,0,0.35))
     if t>=FIN-0.4:                                         # end card grows out of the same running shot
         v=t-FIN; k=ease(ramp(v,-0.4,0.8))
         if k>0.02: fr=fr.filter(ImageFilter.GaussianBlur(14*k))
         fr.alpha_composite(Image.new('RGBA',(W,H),(6,9,14,int(170*k))))
-        show(fr,E1,ease(ramp(v,0.2,0.6)))
-        pop(fr,E2,ramp(v,0.85,1.15),E2_Y)
-        brush_at(fr,ramp(v,1.2,1.55))
-        show(fr,E3,ease(ramp(v,1.6,2.0)),12)
-        la=ramp(v,1.95,2.5)
+        show(fr,E1,ease(ramp(v,0.2,0.55)))
+        if HV-0.25<v<HV:                                  # breath before the hit: the room darkens
+            fr.alpha_composite(Image.new('RGBA',(W,H),(0,0,0,int(90*ramp(v,HV-0.25,HV)))))
+        if v>=HV:
+            g=np.exp(-(v-HV)*6)*0.9+0.14+0.04*np.sin((v-HV)*5)
+            fr.alpha_composite(faded(GLOW,min(1,g)))
+        punch(fr,E2,ramp(v,HV,HV+0.28),E2_Y)
+        brush_at(fr,ramp(v,HV+0.10,HV+0.32))
+        if v>=HV:                                         # light burst on impact
+            fl=np.exp(-(v-HV)*9)*0.42
+            if fl>0.01: fr.alpha_composite(Image.new('RGBA',(W,H),(255,120,90,int(255*fl))))
+        fr=shake(fr,v)
+        show(fr,E3,ease(ramp(v,1.55,1.95)),12)
+        la=ramp(v,1.9,2.45)
         if la>0:
             s=0.9+0.1*ease(la); L=faded(LOGO,min(1,la*1.6))
             if s<1:
                 L=L.resize((int(W*s),int(H*s)),Image.LANCZOS); tmp=Image.new('RGBA',(W,H),(0,0,0,0))
                 tmp.alpha_composite(L,(int((W-L.width)/2),int((LOGO_Y+LH/2)*(1-s)))); L=tmp
             fr.alpha_composite(L)
-        show(fr,CONT,ease(ramp(v,2.35,2.75)),28); show(fr,NOTE,ease(ramp(v,2.65,3.05)),10)
+        show(fr,CONT,ease(ramp(v,2.3,2.7)),28); show(fr,NOTE,ease(ramp(v,2.6,3.0)),10)
     return fr.convert('RGB')
 def eio(x): return x*x*(3-2*x)
 
@@ -140,6 +183,7 @@ MUSIC={'A':('snd/music_679.mp3',70.4,'Epical Drums 04'),'B':('snd/music_614.mp3'
 def refine_drop(FF,fn,tdrop):
     x=aload(FF,fn,tdrop-0.6,1.2).mean(1); e=np.array([rms(x[i:i+480]) for i in range(0,len(x)-480,240)])
     on=np.diff(e); return tdrop-0.6+(int(np.argmax(on))+1)*240/SR
+MUSIC_LUFS=-20.0; FINAL_GAIN=[0.0]
 def mix(FF,key,out_wav):
     Nn=int(DUR*SR); o=np.zeros((Nn,2),np.float32)
     def place(x,t,g,fin=0.0,fade=0.0):
@@ -159,23 +203,45 @@ def mix(FF,key,out_wav):
         nat[s:s+n]+=x[:n]*g
     # the hook breath: native sound gets the room while the music dips
     o+=nat*0.85
-    # 2) music: its strongest lift lands on the car flash (10.5 s)
     fn,td,_=MUSIC[key]; td=refine_drop(FF,fn,td); start=td-HIT
     m=aload(FF,fn,start,DUR+0.5)[:Nn]; m=m/rms(m)*0.06
     tt=np.arange(len(m))/SR
-    env=np.clip(tt/1.2,0,1)                                   # fade in
-    env*=1-0.72*np.clip((tt-2.9)/0.25,0,1)*np.clip((4.6-tt)/0.6,0,1)   # sudden hush when the tray appears
-    env*=np.where(tt<HIT,0.75,1.0)                            # held back until the car answers
-    env*=np.clip((DUR-tt)/2.2,0,1)                            # long tail into the end card
-    place(m*env[:,None],0,1.0)
-    # 3) accents
-    imp=aload(FF,'snd/drum_impact.mp3'); imp=imp/rms(imp)*0.04; place(imp,HIT-0.03,1.0,fade=1.5)
-    place(imp,FIN+0.85,0.6,fade=1.2)                      # «سيارتك لا !» lands
-    lg=aload(FF,'snd/logo_impact.mp3'); lg=lg/rms(lg)*0.04; place(lg,FIN+1.95,1.0,fade=2.0)
-    mx=np.abs(o).max(); o=o/mx*0.95 if mx>0.95 else o
+    env=np.clip(tt/1.2,0,1)
+    env*=1-0.72*np.clip((tt-2.9)/0.25,0,1)*np.clip((4.6-tt)/0.6,0,1)    # hush when the tray appears
+    env*=np.where(tt<HIT,0.75,1.0)
+    hv=FIN+HV; env*=1-0.85*np.clip((tt-(hv-0.3))/0.25,0,1)*np.clip((hv+0.05-tt)/0.05,0,1)  # vacuum before «سيارتك لا!»
+    env*=np.clip((DUR-tt)/2.2,0,1)
+    mus=m*env[:,None]
+    acc=np.zeros_like(o)
+    def put(x,t,g,fade=0.0):
+        x=x.copy()
+        if fade: k=min(len(x),int(fade*SR)); x[-k:]*=np.linspace(1,0,k)[:,None]
+        s0=int(t*SR); n=min(len(x),Nn-s0)
+        if n>0: acc[s0:s0+n]+=x[:n]*g
+    imp=aload(FF,'snd/drum_impact.mp3'); imp=imp/rms(imp)*0.04; put(imp,HIT-0.03,1.0,fade=1.5)
+    put(imp,hv-0.02,1.4,fade=1.6)                                        # the slam
+    ts=np.arange(int(0.9*SR))/SR; sub=np.sin(2*np.pi*(55-20*ts)*ts)*np.exp(-ts*4.5); put(np.stack([sub,sub],1).astype(np.float32),hv,0.22)  # sub boom
+    nz=np.random.default_rng(4).normal(0,1,int(0.22*SR)); nz=np.convolve(nz,np.ones(6)/6,'same'); nz-=np.convolve(nz,np.ones(60)/60,'same')
+    sw=nz*np.sin(np.pi*np.linspace(0,1,len(nz)))**2; sw=sw/np.abs(sw).max(); put(np.stack([sw,sw*0.8],1).astype(np.float32),hv+0.10,0.10)  # brush swipe
+    lg=aload(FF,'snd/logo_impact.mp3'); lg=lg/rms(lg)*0.04; put(lg,FIN+1.9,1.0,fade=2.0)
+    # set the music to exactly the requested loudness inside the final -14 LUFS mix
+    def lufs(x):
+        p='lufs_tmp.wav'
+        with wave.open(p,'wb') as w:
+            w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(x,-1,1)*32767).astype('<i2').tobytes())
+        r=subprocess.run([FF,'-hide_banner','-i',p,'-af','ebur128','-f','null','-'],capture_output=True,text=True).stderr
+        return float(r.split('Integrated loudness:')[1].split('I:')[1].split('LUFS')[0])
+    g=1.0
+    for _ in range(3):
+        tot=o+mus*g+acc; sc=0.5/ (np.abs(tot).max()+1e-9)
+        Lt=lufs(tot*sc); Lm=lufs(mus*g*sc); gain=-14-Lt
+        g*=10**((MUSIC_LUFS-(Lm+gain))/20)
+    tot=o+mus*g+acc; sc=0.5/(np.abs(tot).max()+1e-9); Lt=lufs(tot*sc); Lm=lufs(mus*g*sc)
+    print(f'music in final mix: {Lm+(-14-Lt):.1f} LUFS')
+    o=tot*sc; FINAL_GAIN[0]=-14-Lt
     with wave.open(out_wav,'wb') as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(o,-1,1)*32767).astype('<i2').tobytes())
-    subprocess.run([FF,'-v','error','-y','-i',out_wav,'-af','loudnorm=I=-14:TP=-1.0:LRA=9','-ar','48000',out_wav.replace('.wav','_n.wav')],check=True)
+    subprocess.run([FF,'-v','error','-y','-i',out_wav,'-af',f'volume={FINAL_GAIN[0]:.2f}dB,alimiter=limit=0.891:level=disabled','-ar','48000',out_wav.replace('.wav','_n.wav')],check=True)
 def chunk(FF,a,b):
     os.makedirs('rchunks',exist_ok=True)
     p=subprocess.Popen([FF,'-v','error','-y','-f','rawvideo','-pix_fmt','rgb24','-s',f'{W}x{H}','-r',str(FPS),'-i','-','-c:v','libx264','-preset','fast','-crf','10','-pix_fmt','yuv420p',f'rchunks/{a:05d}.mp4'],stdin=subprocess.PIPE)
