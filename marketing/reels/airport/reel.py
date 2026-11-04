@@ -196,9 +196,11 @@ def mix(FF,key,out_wav):
         if n>0: o[s:s+n]+=x[:n]*g
     # 1) native clip audio, cut exactly with the picture (it is synced: belt hum, key, click, chirp, steps, trunk slam, engine)
     nat=np.zeros_like(o); XO=0.15
+    XOS={4:0.3}                                                  # longer blend into the traveller shot
     G={'1v2':1.0,'2':1.0,'3':1.15,'4':1.1,'5':0.95,'6v2':1.15,'7':1.1}
     for idx,(a,b,c,c0,sp,g) in enumerate(EDL):
-        pre=XO if idx>0 else 0.0; post=XO if idx<len(EDL)-1 else 0.0
+        pre=XOS.get(idx,XO) if idx>0 else 0.0; post=XOS.get(idx+1,XO) if idx<len(EDL)-1 else 0.0
+        pre=min(pre,c0/sp) if idx>0 else 0.0
         tempo=','.join(['atempo=2.0']*(int(np.log2(sp))) ) if sp in (2.0,4.0) else (f'atempo={sp}' if sp!=1 else '')
         af='highpass=f=60,lowpass=f=9000'+(','+tempo if tempo else '')
         ss=max(0.0,c0-pre*sp); x=aload(FF,f'clips/{c}.mp4',ss,(b-a+pre+post)*sp,af=af)
@@ -212,8 +214,15 @@ def mix(FF,key,out_wav):
     mono=np.abs(nat).mean(1); w=int(0.35*SR)
     env_=np.sqrt(np.convolve(mono**2,np.ones(w)/w,'same'))+1e-5
     tgt=np.median(env_[int(0.5*SR):int((FIN-0.5)*SR)])
-    gn=np.clip(tgt/env_,0.6,3.0); gn=np.convolve(gn,np.ones(int(0.25*SR))/int(0.25*SR),'same')
+    gn=np.clip(tgt/env_,0.6,4.0); gn=np.convolve(gn,np.ones(int(0.25*SR))/int(0.25*SR),'same')
     nat=nat*gn[:,None]
+    # continuous night-air room tone under every shot, so a quiet clip end never leaves a hole
+    rt=np.random.default_rng(9).normal(0,1,(Nn,2)).astype(np.float32)
+    for _ in range(3): rt=(rt+np.roll(rt,1,0)+np.roll(rt,2,0))/3          # soft low-pass
+    rt-= np.convolve(rt[:,0],np.ones(200)/200,'same')[:,None]*0.0
+    rt=rt/rms(rt)*tgt*0.55
+    ramp_=np.clip(np.arange(Nn)/SR/0.8,0,1)*np.clip((FIN+1.5-np.arange(Nn)/SR)/1.5,0,1)
+    nat+=rt*ramp_[:,None]
     o+=nat*0.85
     fn,td,_=MUSIC[key]; td=refine_drop(FF,fn,td); start=td-HIT
     m=aload(FF,fn,start,DUR+0.5)[:Nn]; m=m/rms(m)*0.06
