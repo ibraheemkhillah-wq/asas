@@ -20,14 +20,14 @@ def zoom(im,s):
     w,h=W/s,H/s; return im.resize((W,H),Image.BICUBIC,box=((W-w)/2,(H-h)/2,(W+w)/2,(H+h)/2))
 # (timeline start, end, clip, clip-time at start, speed, zoom group)
 EDL=[(0.0, 5.0,'1v2',0.0,1.0,'A'),   # carousel: belt carries the bags, tray arrives
-     (5.0, 6.5,'2',  0.3,2.0,'A'),   # same take continues: hand from the right takes the key (2x, 1.5 s)
-     (6.5, 9.0,'3',  1.2,1.0,'B'),   # unlock press lands at ~8.7
-     (9.0,12.5,'4',  0.0,1.0,'C'),   # car answers: indicators flash on the hit
-     (12.5,15.5,'5', 0.3,1.0,'D'),   # traveller walks to the car
-     (15.5,18.5,'6v2',1.6,1.0,'E'),  # bag in, tailgate shuts — first second skipped
-     (18.5,22.0,'7', 0.0,1.0,'F')]   # drive away; the same shot keeps running under the end card
-FIN=22.0; DUR=26.0; N=int(DUR*FPS); HIT=9.0
-ZG={'A':(0.0,6.5,0.035),'B':(6.5,9.0,0.025),'C':(9.0,12.5,0.025),'D':(12.5,15.5,0.025),'E':(15.5,18.5,0.025),'F':(18.5,DUR,0.06)}
+     (5.0, 5.75,'2', 0.3,4.0,'A'),   # same take continues: hand takes the key (4x)
+     (5.75,7.0,'3',  1.2,2.0,'B'),   # unlock press (2x), lands at ~6.85
+     (7.0,10.5,'4',  0.0,1.0,'C'),   # car answers: indicators flash on the hit
+     (10.5,13.5,'5', 0.3,1.0,'D'),   # traveller walks to the car
+     (13.5,16.5,'6v2',1.6,1.0,'E'),  # bag in, tailgate shuts — first second skipped
+     (16.5,20.0,'7', 0.0,1.0,'F')]   # drive away; the same shot keeps running under the end card
+FIN=20.0; DUR=24.0; N=int(DUR*FPS); HIT=7.0
+ZG={'A':(0.0,5.75,0.035),'B':(5.75,7.0,0.02),'C':(7.0,10.5,0.025),'D':(10.5,13.5,0.025),'E':(13.5,16.5,0.025),'F':(16.5,DUR,0.06)}
 def zf(g,t):
     a,b,k=ZG[g]; return 1.0+k*np.clip((t-a)/(b-a),0,1)
 XF=0.3                                    # dissolve 1->2 so the carousel reads as one take
@@ -39,8 +39,8 @@ T1='حــقــيــبــتــك تــأخــرت؟'; T2='ســيــار
 E1=layer(lambda L:text(L,T1,560,84))
 E2_Y=690; E2_FONT=F(B.AR_BLACK,124)
 E2=layer(lambda L:text(L,T2,E2_Y,124,OR,E2_FONT))
-E3=layer(lambda L:text(L,'استلام وتسليم في المطار',930,52,(225,230,238),F(B.AR_BOLD,52)))
-LOGO_Y=1180
+E3=layer(lambda L:text(L,'استلام وتسليم في مطار اسطنبول وصبيحة',850,46,(225,230,238),F(B.AR_BOLD,46)))
+LOGO_Y=1120
 LOGO=layer(lambda L:logo(L,LOGO_Y)); _lh=Image.open(B.LOGO_WHITE).size; LH=int(620*_lh[1]/_lh[0])
 CONT=layer(lambda L:contacts(L,LOGO_Y+LH+100))
 NOTE=layer(lambda L:text(L,'الخدمة برسوم إضافية · وفق الشروط والأحكام',1830,28,MUTED,F('NotoKufiArabic-Regular.ttf',28)))
@@ -139,11 +139,11 @@ def render(f):
         a2,b2,c2,c02,sp2,g2=EDL[1]
         nxt=zoom(clip(c2,c02),zf('A',t)); fr=Image.blend(fr,nxt,eio(ramp(t,5.0-XF,5.0)))
     if c in ('1v2','2'):
-        ha=ease(ramp(t,3.0,3.5))*(1-ramp(t,5.8,6.3))
+        ha=ease(ramp(t,3.0,3.5))*(1-ramp(t,5.3,5.72))
         if ha>0:
             sh=fr.copy(); shade(sh,top=560); fr=Image.blend(fr,sh,ha)
-            show(fr,HOOK1,ease(ramp(t,3.0,3.5))*(1-ramp(t,5.8,6.3)))
-            show(fr,HOOK2,ease(ramp(t,3.7,4.2))*(1-ramp(t,5.8,6.3)))
+            show(fr,HOOK1,ease(ramp(t,3.0,3.5))*(1-ramp(t,5.3,5.72)))
+            show(fr,HOOK2,ease(ramp(t,3.7,4.2))*(1-ramp(t,5.3,5.72)))
     if t<0.35: fr=Image.blend(Image.new('RGBA',(W,H),(0,0,0,255)),fr,ramp(t,0,0.35))
     if t>=FIN-0.4:                                         # end card grows out of the same running shot
         v=t-FIN; k=ease(ramp(v,-0.4,0.8))
@@ -156,7 +156,6 @@ def render(f):
             g=np.exp(-(v-HV)*6)*0.9+0.14+0.04*np.sin((v-HV)*5)
             fr.alpha_composite(faded(GLOW,min(1,g)))
         punch(fr,E2,ramp(v,HV,HV+0.28),E2_Y)
-        brush_at(fr,ramp(v,HV+0.10,HV+0.32))
         if v>=HV:                                         # light burst on impact
             fl=np.exp(-(v-HV)*9)*0.42
             if fl>0.01: fr.alpha_composite(Image.new('RGBA',(W,H),(255,120,90,int(255*fl))))
@@ -193,22 +192,32 @@ def mix(FF,key,out_wav):
         s=int(t*SR); n=min(len(x),Nn-s)
         if n>0: o[s:s+n]+=x[:n]*g
     # 1) native clip audio, cut exactly with the picture (it is synced: belt hum, key, click, chirp, steps, trunk slam, engine)
-    nat=np.zeros_like(o)
-    for a,b,c,c0,sp,g in EDL:
-        x=aload(FF,f'clips/{c}.mp4',c0,(b-a)*sp,af='highpass=f=60,lowpass=f=9000'+(f',atempo={sp}' if sp!=1 else ''))
-        x=x/ (np.abs(x).max()+1e-9)
-        s=int(a*SR); n=min(len(x),Nn-s); k=int(0.03*SR)
-        x[:k]*=np.linspace(0,1,k)[:,None]; x[n-k:n]*=np.linspace(1,0,k)[:,None]
-        g={'1v2':0.30,'2':0.32,'3':0.42,'4':0.40,'5':0.30,'6v2':0.45,'7':0.42}[c]
-        nat[s:s+n]+=x[:n]*g
-    # the hook breath: native sound gets the room while the music dips
+    nat=np.zeros_like(o); XO=0.15
+    G={'1v2':1.0,'2':1.0,'3':1.15,'4':1.1,'5':0.95,'6v2':1.15,'7':1.1}
+    for idx,(a,b,c,c0,sp,g) in enumerate(EDL):
+        pre=XO if idx>0 else 0.0; post=XO if idx<len(EDL)-1 else 0.0
+        tempo=','.join(['atempo=2.0']*(int(np.log2(sp))) ) if sp in (2.0,4.0) else (f'atempo={sp}' if sp!=1 else '')
+        af='highpass=f=60,lowpass=f=9000'+(','+tempo if tempo else '')
+        ss=max(0.0,c0-pre*sp); x=aload(FF,f'clips/{c}.mp4',ss,(b-a+pre+post)*sp,af=af)
+        x=x/rms(x)*0.09*G[c]                                     # level by loudness, not by peak
+        x=np.tanh(x*2.2)/2.2                                     # tame single spikes so nothing jumps out
+        n=len(x); k1=int(pre*SR*2) or 1; k2=int(post*SR*2) or 1
+        if pre: x[:k1]*=np.sqrt(np.linspace(0,1,k1))[:,None]          # equal-power crossfade
+        if post: x[n-k2:]*=np.sqrt(np.linspace(1,0,k2))[:,None]
+        s0=int((a-pre)*SR); s0=max(0,s0); m_=min(n,Nn-s0); nat[s0:s0+m_]+=x[:m_]
+    # level-rider: even out the native track so no shot change leaves a hole or a jump
+    mono=np.abs(nat).mean(1); w=int(0.35*SR)
+    env_=np.sqrt(np.convolve(mono**2,np.ones(w)/w,'same'))+1e-5
+    tgt=np.median(env_[int(0.5*SR):int((FIN-0.5)*SR)])
+    gn=np.clip(tgt/env_,0.6,3.0); gn=np.convolve(gn,np.ones(int(0.25*SR))/int(0.25*SR),'same')
+    nat=nat*gn[:,None]
     o+=nat*0.85
     fn,td,_=MUSIC[key]; td=refine_drop(FF,fn,td); start=td-HIT
     m=aload(FF,fn,start,DUR+0.5)[:Nn]; m=m/rms(m)*0.06
     tt=np.arange(len(m))/SR
     env=np.clip(tt/1.2,0,1)
     env*=1-0.72*np.clip((tt-2.9)/0.25,0,1)*np.clip((4.6-tt)/0.6,0,1)    # hush when the tray appears
-    env*=np.where(tt<HIT,0.75,1.0)
+    env*=0.75+0.25*np.clip((tt-(HIT-0.4))/0.9,0,1)       # smooth lift into the hit, no step
     hv=FIN+HV; env*=1-0.85*np.clip((tt-(hv-0.3))/0.25,0,1)*np.clip((hv+0.05-tt)/0.05,0,1)  # vacuum before «سيارتك لا!»
     env*=np.clip((DUR-tt)/2.2,0,1)
     mus=m*env[:,None]
