@@ -205,6 +205,9 @@ def mix(FF,key,out_wav):
         af='highpass=f=60,lowpass=f=9000'+(','+tempo if tempo else '')
         ss=max(0.0,c0-pre*sp); x=aload(FF,f'clips/{c}.mp4',ss,(b-a+pre+post)*sp,af=af)
         x=x/rms(x)*0.09*G[c]                                     # level by loudness, not by peak
+        if c=='4':                                               # clip 4's own sound dies in its last 0.6 s: carry its ambience on
+            L=int(0.8*SR); n0=len(x)-L; src=x[n0-int(1.2*SR):n0-int(1.2*SR)+L]
+            w=np.clip(np.linspace(-0.2,1.2,L),0,1)[:,None]; x[n0:]=x[n0:]*(1-w)+src*w
         x=np.tanh(x*2.2)/2.2                                     # tame single spikes so nothing jumps out
         n=len(x); k1=int(pre*SR*2) or 1; k2=int(post*SR*2) or 1
         if pre: x[:k1]*=np.sqrt(np.linspace(0,1,k1))[:,None]          # equal-power crossfade
@@ -216,13 +219,9 @@ def mix(FF,key,out_wav):
     tgt=np.median(env_[int(0.5*SR):int((FIN-0.5)*SR)])
     gn=np.clip(tgt/env_,0.6,4.0); gn=np.convolve(gn,np.ones(int(0.25*SR))/int(0.25*SR),'same')
     nat=nat*gn[:,None]
-    # continuous night-air room tone under every shot, so a quiet clip end never leaves a hole
-    rt=np.random.default_rng(9).normal(0,1,(Nn,2)).astype(np.float32)
-    for _ in range(3): rt=(rt+np.roll(rt,1,0)+np.roll(rt,2,0))/3          # soft low-pass
-    rt-= np.convolve(rt[:,0],np.ones(200)/200,'same')[:,None]*0.0
-    rt=rt/rms(rt)*tgt*0.55
-    ramp_=np.clip(np.arange(Nn)/SR/0.8,0,1)*np.clip((FIN+1.5-np.arange(Nn)/SR)/1.5,0,1)
-    nat+=rt*ramp_[:,None]
+    w2=int(0.05*SR); e2=np.sqrt(np.convolve((np.abs(nat).mean(1))**2,np.ones(w2)/w2,'same'))+1e-6
+    lim=np.minimum(1.0,(tgt*1.5)/e2); lim=np.convolve(lim,np.ones(int(0.04*SR))/int(0.04*SR),'same')
+    nat=nat*lim[:,None]                                          # fast soft limiter: no sudden bursts after a cut
     o+=nat*0.85
     fn,td,_=MUSIC[key]; td=refine_drop(FF,fn,td); start=td-HIT
     m=aload(FF,fn,start,DUR+0.5)[:Nn]; m=m/rms(m)*0.06
