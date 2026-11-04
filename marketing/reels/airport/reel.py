@@ -129,18 +129,20 @@ def clip_at(c,ct):
         if LAST7 is None: LAST7=clip('7',5.0)
         return LAST7
     return clip(c,ct)
+VC0={4:0.75}                               # picture-only: start the traveller shot once he is already walking (sound untouched)
 def render(f):
     t=f/FPS
-    for a,b,c,c0,sp,g in EDL:
+    for idx,(a,b,c,c0,sp,g) in enumerate(EDL):
         if t<b: break
-    else: a,b,c,c0,sp,g=EDL[-1]
+    else: idx=len(EDL)-1; a,b,c,c0,sp,g=EDL[-1]
+    c0=VC0.get(idx,c0)
     fr=zoom(clip_at(c,c0+(t-a)*sp),zf(g,t))
     if c=='1v2' and t>5.0-XF:                              # dissolve into the hand shot (no visible cut)
         a2,b2,c2,c02,sp2,g2=EDL[1]
         nxt=zoom(clip(c2,c02),zf('A',t)); fr=Image.blend(fr,nxt,eio(ramp(t,5.0-XF,5.0)))
     if c=='4' and t>11.0-0.35:                             # dissolve car-flash -> traveller, no hard cut
         a5,b5,c5,c05,sp5,g5=EDL[4]
-        nxt=zoom(clip(c5,c05),zf('D',11.0)); fr=Image.blend(fr,nxt,eio(ramp(t,11.0-0.35,11.0)))
+        c05=VC0.get(4,c05); nxt=zoom(clip(c5,c05+(t-11.0)*sp5),zf('D',11.0)); fr=Image.blend(fr,nxt,eio(ramp(t,11.0-0.35,11.0)))   # incoming shot already moving
     if c in ('1v2','2'):
         ha=ease(ramp(t,3.0,3.5))*(1-ramp(t,5.3,5.72))
         if ha>0:
