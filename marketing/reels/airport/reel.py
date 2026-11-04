@@ -22,12 +22,12 @@ def zoom(im,s):
 EDL=[(0.0, 5.0,'1v2',0.0,1.0,'A'),   # carousel: belt carries the bags, tray arrives
      (5.0, 5.75,'2', 0.3,4.0,'A'),   # same take continues: hand takes the key (4x)
      (5.75,7.0,'3',  1.2,2.0,'B'),   # unlock press (2x), lands at ~6.85
-     (7.0,10.5,'4',  0.0,1.0,'C'),   # car answers: indicators flash on the hit
-     (10.5,13.5,'5', 0.3,1.0,'D'),   # traveller walks to the car
-     (13.5,16.5,'6v2',1.6,1.0,'E'),  # bag in, tailgate shuts — first second skipped
-     (16.5,20.0,'7', 0.0,1.0,'F')]   # drive away; the same shot keeps running under the end card
-FIN=20.0; DUR=24.0; N=int(DUR*FPS); HIT=7.0
-ZG={'A':(0.0,5.75,0.035),'B':(5.75,7.0,0.02),'C':(7.0,10.5,0.025),'D':(10.5,13.5,0.025),'E':(13.5,16.5,0.025),'F':(16.5,DUR,0.06)}
+     (7.0,11.0,'4',  0.0,1.0,'C'),   # car answers: indicators flash on the hit — full clip, runs with the music
+     (11.0,14.0,'5', 0.3,1.0,'D'),   # traveller walks to the car (soft dissolve in)
+     (14.0,17.0,'6v2',1.6,1.0,'E'),  # bag in, tailgate shuts — first second skipped
+     (17.0,20.5,'7', 0.0,1.0,'F')]   # drive away; the same shot keeps running under the end card
+FIN=20.5; DUR=24.5; N=int(DUR*FPS); HIT=7.0
+ZG={'A':(0.0,5.75,0.035),'B':(5.75,7.0,0.02),'C':(7.0,11.0,0.03),'D':(11.0,14.0,0.025),'E':(14.0,17.0,0.025),'F':(17.0,DUR,0.06)}
 def zf(g,t):
     a,b,k=ZG[g]; return 1.0+k*np.clip((t-a)/(b-a),0,1)
 XF=0.3                                    # dissolve 1->2 so the carousel reads as one take
@@ -36,14 +36,14 @@ def layer(fn):
 HOOK1=layer(lambda L:text(L,'أوّل ما يصلك في المطار',240,72))
 HOOK2=layer(lambda L:text(L,'ليس حقيبتك',360,100,OR))
 T1='حــقــيــبــتــك تــأخــرت؟'; T2='ســيــارتــك لا!'
-E1=layer(lambda L:text(L,T1,560,84))
-E2_Y=690; E2_FONT=F(B.AR_BLACK,124)
+E1=layer(lambda L:text(L,T1,470,84))
+E2_Y=600; E2_FONT=F(B.AR_BLACK,124)
 E2=layer(lambda L:text(L,T2,E2_Y,124,OR,E2_FONT))
-E3=layer(lambda L:text(L,'استلام وتسليم في مطار اسطنبول وصبيحة',850,46,(225,230,238),F(B.AR_BOLD,46)))
-LOGO_Y=1120
+E3=layer(lambda L:(text(L,'احجز سيارتك واستلمها',755,54,(235,238,244),F(B.AR_BOLD,54)),text(L,'من مطار اسطنبول أو صبيحة',830,54,(235,238,244),F(B.AR_BOLD,54))))
+LOGO_Y=1000
 LOGO=layer(lambda L:logo(L,LOGO_Y)); _lh=Image.open(B.LOGO_WHITE).size; LH=int(620*_lh[1]/_lh[0])
 CONT=layer(lambda L:contacts(L,LOGO_Y+LH+100))
-NOTE=layer(lambda L:text(L,'الخدمة برسوم إضافية · وفق الشروط والأحكام',1830,28,MUTED,F('NotoKufiArabic-Regular.ttf',28)))
+NOTE=layer(lambda L:text(L,'الخدمة برسوم إضافية · وفق الشروط والأحكام',1720,28,MUTED,F('NotoKufiArabic-Regular.ttf',28)))
 # red paint-brush stroke under «سيارتك لا !»
 def brush(w,h,seed=7):
     """bold red paint stroke: solid wet core, ragged bristle edges, dry split tail"""
@@ -138,6 +138,9 @@ def render(f):
     if c=='1v2' and t>5.0-XF:                              # dissolve into the hand shot (no visible cut)
         a2,b2,c2,c02,sp2,g2=EDL[1]
         nxt=zoom(clip(c2,c02),zf('A',t)); fr=Image.blend(fr,nxt,eio(ramp(t,5.0-XF,5.0)))
+    if c=='4' and t>11.0-0.35:                             # dissolve car-flash -> traveller, no hard cut
+        a5,b5,c5,c05,sp5,g5=EDL[4]
+        nxt=zoom(clip(c5,c05),zf('D',11.0)); fr=Image.blend(fr,nxt,eio(ramp(t,11.0-0.35,11.0)))
     if c in ('1v2','2'):
         ha=ease(ramp(t,3.0,3.5))*(1-ramp(t,5.3,5.72))
         if ha>0:
@@ -218,7 +221,6 @@ def mix(FF,key,out_wav):
     env=np.clip(tt/1.2,0,1)
     env*=1-0.72*np.clip((tt-2.9)/0.25,0,1)*np.clip((4.6-tt)/0.6,0,1)    # hush when the tray appears
     env*=0.75+0.25*np.clip((tt-(HIT-0.4))/0.9,0,1)       # smooth lift into the hit, no step
-    hv=FIN+HV; env*=1-0.85*np.clip((tt-(hv-0.3))/0.25,0,1)*np.clip((hv+0.05-tt)/0.05,0,1)  # vacuum before «سيارتك لا!»
     env*=np.clip((DUR-tt)/2.2,0,1)
     mus=m*env[:,None]
     acc=np.zeros_like(o)
@@ -228,10 +230,6 @@ def mix(FF,key,out_wav):
         s0=int(t*SR); n=min(len(x),Nn-s0)
         if n>0: acc[s0:s0+n]+=x[:n]*g
     imp=aload(FF,'snd/drum_impact.mp3'); imp=imp/rms(imp)*0.04; put(imp,HIT-0.03,1.0,fade=1.5)
-    put(imp,hv-0.02,1.4,fade=1.6)                                        # the slam
-    ts=np.arange(int(0.9*SR))/SR; sub=np.sin(2*np.pi*(55-20*ts)*ts)*np.exp(-ts*4.5); put(np.stack([sub,sub],1).astype(np.float32),hv,0.22)  # sub boom
-    nz=np.random.default_rng(4).normal(0,1,int(0.22*SR)); nz=np.convolve(nz,np.ones(6)/6,'same'); nz-=np.convolve(nz,np.ones(60)/60,'same')
-    sw=nz*np.sin(np.pi*np.linspace(0,1,len(nz)))**2; sw=sw/np.abs(sw).max(); put(np.stack([sw,sw*0.8],1).astype(np.float32),hv+0.10,0.10)  # brush swipe
     lg=aload(FF,'snd/logo_impact.mp3'); lg=lg/rms(lg)*0.04; put(lg,FIN+1.9,1.0,fade=2.0)
     # set the music to exactly the requested loudness inside the final -14 LUFS mix
     def lufs(x):
