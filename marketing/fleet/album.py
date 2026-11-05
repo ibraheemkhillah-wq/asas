@@ -71,9 +71,9 @@ def contacts_footer(fr):
         d.text((x+10,y),txt,font=fc,fill=(255,255,255),anchor='lm'); y+=82
 
 def build(out='i20-red-album.jpg'):
-    fr=Image.open('i20-red-flag.png').convert('RGBA')   # lamp post removed + natural flag (AI edit, blended back into the original photo)
+    fr=Image.open('i20-red-full.png').convert('RGBA')   # lamp post removed + natural flag (AI edit, blended back into the original photo)
     # --- light front plate with the logo, warped onto the old plate
-    dst=[(139.5,1482.5),(284.5,1523),(284.5,1573),(139.5,1527.5)]
+    dst=[(113,1400),(241,1433),(239,1485),(111,1451)]
     pl=plate(); pw,ph=pl.size
     coeff=solve_persp(dst,[(0,0),(pw,0),(pw,ph),(0,ph)])
     warped=pl.transform((W,H),Image.PERSPECTIVE,coeff,resample=Image.BICUBIC)
