@@ -45,14 +45,9 @@ def solve_persp(dst,src):
 def plate(pw=520,ph=112):
     p=Image.new('RGBA',(pw,ph),(0,0,0,0)); d=ImageDraw.Draw(p)
     d.rounded_rectangle((0,0,pw-1,ph-1),radius=14,fill=(246,246,242,255),outline=(40,40,44,255),width=5)
-    d.rounded_rectangle((5,5,86,ph-6),radius=9,fill=(16,58,160,255))            # blue TR band
-    f=B.F(B.LT_BOLD,40); d.text((46,ph-30),'TR',font=f,fill=(255,255,255,255),anchor='mm')
-    # tiny ring of stars on the band
-    for k in range(12):
-        a=2*math.pi*k/12; x=46+15*math.cos(a); y=34+15*math.sin(a); d.ellipse((x-2,y-2,x+2,y+2),fill=(250,210,40,255))
-    lg=Image.open(B.LOGO_NAVY).convert('RGBA'); lw=290; lg=lg.resize((lw,int(lw*lg.height/lg.width)),Image.LANCZOS)
-    p.alpha_composite(lg,(96+(pw-96-lw)//2,(ph-lg.height)//2))
-    # soft top-down light like the rest of the car front
+    lg=Image.open(B.LOGO_NAVY).convert('RGBA'); lw=400; lg=lg.resize((lw,int(lw*lg.height/lg.width)),Image.LANCZOS)
+    if lg.height>ph-22: lg=lg.resize((int(lg.width*(ph-22)/lg.height),ph-22),Image.LANCZOS)
+    p.alpha_composite(lg,((pw-lg.width)//2,(ph-lg.height)//2))
     g=np.linspace(1.0,0.82,ph)[:,None,None]; a=np.asarray(p,np.float32); a[...,:3]*=g
     return Image.fromarray(np.clip(a,0,255).astype('uint8'),'RGBA')
 
@@ -77,21 +72,39 @@ def contacts_footer(fr):
 
 def build(out='i20-red-album.jpg'):
     fr=Image.open('i20-red-base.png').convert('RGBA'); a0=np.asarray(fr.convert('RGB'),np.float32)
-    # --- hanging flag banner on the right facade, under the fascia, behind the conifer
-    bw,bh=182,273; bx,by=803,694
-    bn=banner(bw,bh)
-    sh=Image.new('RGBA',(W,H),(0,0,0,0)); sm=Image.new('L',(W,H),0); sm.paste(bn.split()[3],(bx+10,by+8))
-    sh.putalpha(sm.filter(ImageFilter.GaussianBlur(9)).point(lambda v:int(v*0.45)));
+    # --- remove the street-lamp post (pole + head) by copying the background beside it
+    a=a0.copy(); yy_,xx_=np.mgrid[0:H,0:W]
+    xl=987-0.03*(yy_-625)                                   # pole centre leans slightly
+    pole=(np.abs(xx_-xl)<24)&(yy_>=618)&(yy_<=1068)
+    head=(xx_>=978)&(xx_<=1078)&(yy_>=616)&(yy_<=655)
+    for msk,dx in ((pole,44),(head,-110)):
+        ys_,xs_=np.nonzero(msk); src=np.clip(xs_+dx,0,W-1); a[ys_,xs_]=a0[ys_,src]
+    m=np.asarray(Image.fromarray(((pole|head)*255).astype('uint8')).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(3)),np.float32)[...,None]/255
+    a0=a0*(1-m)+a*m
+    fr=Image.fromarray(np.clip(a0,0,255).astype('uint8')).convert('RGBA')
+    # --- real fabric flag (photo cut-out) hanging from the top of the right-hand fascia
+    fl=Image.open('flag_cutout.png').convert('RGBA'); bw=176; bh=int(bw*fl.height/fl.width); bx,by=805,610
+    fl=fl.resize((bw,bh),Image.LANCZOS)
+    fa=np.asarray(fl,np.float32); grey=fa[...,:3].mean(2,keepdims=True); fa[...,:3]=(grey+(fa[...,:3]-grey)*0.9)*0.96   # match the photo
+    bn=Image.fromarray(np.clip(fa,0,255).astype('uint8'),'RGBA').filter(ImageFilter.GaussianBlur(0.5))
+    sh=Image.new('RGBA',(W,H),(0,0,0,0)); sm=Image.new('L',(W,H),0); sm.paste(bn.split()[3],(bx+9,by+7))
+    sh.putalpha(sm.filter(ImageFilter.GaussianBlur(8)).point(lambda v:int(v*0.45)))
     layer=Image.new('RGBA',(W,H),(0,0,0,0)); layer.alpha_composite(sh); layer.alpha_composite(bn,(bx,by))
-    d=ImageDraw.Draw(layer)                                         # rod + two brackets
-    d.rounded_rectangle((bx-10,by-7,bx+bw+10,by+3),radius=4,fill=(52,54,58,255))
-    for xx in (bx+8,bx+bw-8): d.rectangle((xx-3,by-16,xx+3,by-4),fill=(40,42,46,255))
-    # occluders in front of the banner: the conifer/hedge (green) and the lamp post
+    # occluders in front of the banner: the hedge (solid below its top contour) and the little conifer
     g=a0[...,1]; r=a0[...,0]; b=a0[...,2]
-    occ=((g>r+12)&(g>b+4)).astype(np.float32)
-    yy=np.arange(H)[:,None]; occ*=(yy>800)
-    om=Image.fromarray((occ*255).astype('uint8')).filter(ImageFilter.MedianFilter(7)).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(5))
-    occ=np.asarray(om.filter(ImageFilter.GaussianBlur(1.6)),np.float32)/255
+    fol=((g>b+25)&(g>r-8)).astype(np.float32)
+    occ=np.zeros((H,W),np.float32)
+    for x in range(bx-12,min(W,bx+bw+14)):
+        col=fol[880:1080,x]; dens=np.convolve(col,np.ones(15)/15,'same')
+        k=np.nonzero(dens>0.6)[0]
+        if len(k): occ[880+k[0]+4:1080,x]=1                      # hedge runs down to the ground
+    tops=np.array([np.argmax(occ[:,x]>0) if occ[:,x].any() else 1080 for x in range(W)],np.float32)
+    sm_=np.convolve(np.pad(tops,(6,6),mode='edge'),np.ones(13)/13,'valid'); occ[:]=0
+    for x in range(bx-12,min(W,bx+bw+14)): occ[int(sm_[x]):1080,x]=1
+    con=(fol*((np.arange(W)[None,:]<872)&(np.arange(H)[:,None]>835))).astype('uint8')*255   # conifer on the left
+    con=Image.fromarray(con).filter(ImageFilter.MedianFilter(11)).filter(ImageFilter.MaxFilter(3))
+    occ=np.maximum(occ,np.asarray(con,np.float32)/255)
+    occ=np.asarray(Image.fromarray((occ*255).astype('uint8')).filter(ImageFilter.GaussianBlur(1.5)),np.float32)/255
     la=np.asarray(layer,np.float32); la[...,3]*=1-occ; layer=Image.fromarray(la.astype('uint8'),'RGBA')
     fr.alpha_composite(layer)
     # --- light front plate with the logo, warped onto the old plate
