@@ -14,6 +14,8 @@ PLATES = {
     'clio6-grey':  [(134, 1488), (280, 1525), (276, 1582), (132, 1540)],
     'omoda-grey':  [(122, 1443), (256, 1480), (252, 1532), (120, 1493)],
     'i20-black':   [(122, 1415), (238, 1452), (236, 1495), (120, 1458)],
+    # v2: car moved slightly back (moveback.py guide -> AI grounding), full natural shadow
+    'i20-black-v2': [(155, 1372), (265, 1410), (261, 1445), (153, 1408)],
 }
 
 def grow(q, px=2):
