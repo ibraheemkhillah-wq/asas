@@ -16,6 +16,8 @@ PLATES = {
     'i20-black':   [(122, 1415), (238, 1452), (236, 1495), (120, 1458)],
     # v2: car moved slightly back (moveback.py guide -> AI grounding), full natural shadow
     'i20-black-v2': [(155, 1372), (265, 1410), (261, 1445), (153, 1408)],
+    # v3: as v2, nudged right so there is less empty ground beside the rear
+    'i20-black-v3': [(210, 1380), (318, 1415), (314, 1448), (208, 1412)],
 }
 
 def grow(q, px=2):

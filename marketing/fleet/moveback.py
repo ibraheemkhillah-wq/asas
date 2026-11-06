@@ -7,6 +7,7 @@ from PIL import Image, ImageFilter
 
 HORIZON = 900          # rough eye-level line in the shop photo
 S = 0.92               # 'a little further away'
+DX = 55                # nudge right: less empty ground beside the rear
 
 def squash(mask, y0, f, dx=0, dy=0):
     """flatten a mask vertically about line y0 (factor f) and shift it - a cheap ground projection"""
@@ -23,7 +24,7 @@ def build(name, bg='shop-empty.png'):
     nw, nh = int(W * S), int(H * S)
     small = car.resize((nw, nh), Image.LANCZOS)
     ox = int(round(cx - cx * S)); oy = int(round(HORIZON - HORIZON * S))
-    moved = Image.new('RGBA', (W, H), (0, 0, 0, 0)); moved.alpha_composite(small, (ox, oy))
+    moved = Image.new('RGBA', (W, H), (0, 0, 0, 0)); moved.alpha_composite(small, (ox + DX, oy))
     alpha = moved.getchannel('A')
     bottom = int(np.nonzero(np.asarray(alpha).max(1) > 128)[0].max())
 
