@@ -19,6 +19,7 @@ PLATES = {
     # v3: as v2, nudged right so there is less empty ground beside the rear
     'i20-black-v3': [(210, 1380), (318, 1415), (314, 1448), (208, 1412)],
     'bayon-teal-v3': [(211, 1377), (339, 1412), (335, 1469), (209, 1429)],
+    'tiggo-grey-v3': [(210, 1388), (327, 1420), (325, 1470), (209, 1432)],
 }
 
 def grow(q, px=2):
