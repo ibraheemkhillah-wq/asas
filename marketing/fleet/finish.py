@@ -23,6 +23,7 @@ PLATES = {
     'clio5-white-v3': [(205, 1443), (339, 1480), (335, 1534), (203, 1493)],
     'clio6-grey-v3': [(221, 1441), (356, 1475), (353, 1528), (219, 1490)],
     'omoda-grey-v3': [(210, 1400), (334, 1434), (330, 1482), (208, 1447)],
+    'i20-red-v3':    [(201, 1360), (319, 1390), (317, 1438), (199, 1407)],
 }
 
 def grow(q, px=2):
@@ -35,7 +36,7 @@ def put_plate(fr, quad):
     xs = [p[0] for p in quad]; ys = [p[1] for p in quad]
     reg = np.asarray(fr.convert('L').crop((min(xs), min(ys), max(xs), max(ys))), np.float32)
     white = np.percentile(reg, 90)
-    a = np.asarray(pl, np.float32); a[..., :3] *= min(1.0, white / 240.0)
+    a = np.asarray(pl, np.float32); a[..., :3] *= max(0.86, min(1.0, white / 240.0))   # floor: a dark source plate must not darken ours
     pl = Image.fromarray(np.clip(a, 0, 255).astype('uint8'), 'RGBA')
     coeff = A.solve_persp(grow(quad), [(0, 0), (pw, 0), (pw, ph), (0, ph)])
     w = pl.transform((A.W, A.H), Image.PERSPECTIVE, coeff, resample=Image.BICUBIC).filter(ImageFilter.GaussianBlur(0.6))
