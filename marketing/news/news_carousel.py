@@ -314,8 +314,8 @@ def poll(sl, page, total):
 
 def stats(sl, page, total):
     """One big total, then a ranked bar per market."""
-    cv = bg(sl['bg']).filter(ImageFilter.GaussianBlur(9*K))      # backdrop only: keep the figures clean
-    cv = Image.blend(cv, Image.new('RGBA', (W*K, H*K), DEEP+(255,)), 0.5); grade(cv, 260, 0.96); d = Draw(cv)
+    cv = bg(sl['bg']).filter(ImageFilter.GaussianBlur(sl.get('blur', 9)*K))   # backdrop only: keep the figures clean
+    cv = Image.blend(cv, Image.new('RGBA', (W*K, H*K), DEEP+(255,)), sl.get('dim', 0.5)); grade(cv, sl.get('grade_from', 260), 0.96); d = Draw(cv)
     chrome(cv, d, page, total)
     fe = F(AR_BOLD, 30); ew = w_ar(sl['chip'], fe) + 44; eh = 56; ey = 250
     d.rectangle((R_-ew, ey, R_, ey+eh), fill=O+(255,))
