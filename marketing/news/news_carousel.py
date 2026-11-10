@@ -323,7 +323,7 @@ def stats(sl, page, total):
     fbig = F(LT_TEXT, 150)
     d.text((R_, ey+eh+170), sl['total'], font=fbig, fill=O+(255,), anchor='rs', direction='ltr', language='en')
     d.text((R_, ey+eh+250), sl['total_label'], font=F(AR_BLACK, 50), fill=Wh+(255,), anchor='rs', direction='rtl', language='ar')
-    top = ey+eh+300; rh = 124; pad = 34
+    top = ey+eh+300; rh = sl.get('rh', 124); pad = 34
     lay = Image.new('RGBA', (W*K, H*K), (0,0,0,0)); ld = Draw(lay)
     ld.rectangle((M, top, R_, top+len(sl['rows'])*rh+2*pad-20), fill=DEEP+(225,), outline=(255,255,255,46), width=1)
     cv.alpha_composite(lay); d = Draw(cv)
@@ -337,7 +337,7 @@ def stats(sl, page, total):
         d.rounded_rectangle((bx0, by, bx1, by+14), radius=7, fill=(40,62,88,255))
         d.rounded_rectangle((bx1-(bx1-bx0)*v/mx, by, bx1, by+14), radius=7, fill=O+(255,))
     if sl.get('note'):
-        d.text((R_, top+len(sl['rows'])*rh+2*pad+30), sl['note'], font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
+        d.text((R_, top+len(sl['rows'])*rh+2*pad-20+52), sl['note'], font=F(AR_BOLD, 28), fill=SOFT+(255,), anchor='rs', direction='rtl', language='ar')
     source_line(d, R_, 1252)
     return cv
 
