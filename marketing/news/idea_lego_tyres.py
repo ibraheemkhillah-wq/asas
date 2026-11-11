@@ -3,8 +3,9 @@
 usage: python3 idea_lego_tyres.py <brand-kit dir> <out.png>
 Photo: Canva (idea-tyres-bg.jpg): a full-size tyre with a tiny toy tyre in front of it.
 Logos: the four companies' own marks (logo-*.png), each on a plate in its row.
-Figures: tyres made in 2011 (the year is not printed, at the user's request) — LEGO 318 m, Bridgestone 190 m, Michelin 184 m, Goodyear 181 m; Guinness World
-Records lists LEGO as the largest toy tyre manufacturer by annual volume.
+Figures (approximate, latest available for each, the year is not printed): LEGO about 306 m a year (Guinness
+World Records), Michelin nearly 200 m in 2024 (press report), Goodyear 158.7 m in 2025 (annual report).
+Bridgestone is left out: it publishes output by weight, not by count.
 The photo is scaled down into the top-left so the headline has the dark right side to itself; the canvas
 around it is the same photo enlarged and blurred. Layout in 1080 units; every line is placed from its
 measured ink box with at least 24 units clear.
@@ -65,30 +66,30 @@ def headline(d):
     return y, c0 + ch
 
 
-# name, million tyres a year, logo file, colour of the plate the logo sits on
-ROWS = [('ليغو', 318, 'logo-lego.png', (227, 0, 11)), ('بريدجستون', 190, 'logo-bridgestone.png', (255, 255, 255)),
-        ('ميشلان', 184, 'logo-michelin.png', (255, 255, 255)), ('غوديير', 181, 'logo-goodyear.png', (0, 70, 150))]
-Y0, RH, GAP = 778, 90, 12
+# name, million tyres a year (latest figure available for each), logo file, colour of the plate the logo sits on
+ROWS = [('ليغو', 306, 'logo-lego.png', (227, 0, 11)), ('ميشلان', 200, 'logo-michelin.png', (255, 255, 255)),
+        ('غوديير', 159, 'logo-goodyear.png', (0, 70, 150))]
+Y0, RH, GAP = 778, 116, 16
 
 
 def table(cv):
     glow = Image.new('RGBA', (W*K, H*K), (0, 0, 0, 0))               # soft orange glow under the winner
     ImageDraw.Draw(glow).rounded_rectangle((M*K, (Y0 + 6)*K, R_*K, (Y0 + RH + 10)*K), radius=18*K, fill=O + (120,))
     cv.alpha_composite(glow.filter(ImageFilter.GaussianBlur(22*K)))
-    d = nc.Draw(cv); fn = F(AR_BLACK, 38); fv = F(OX, 58); fu = F(AR_BOLD, 24); fr = F(OX, 40)
+    d = nc.Draw(cv); fn = F(AR_BLACK, 40); fv = F(OX, 64); fu = F(AR_BOLD, 26); fr = F(OX, 46)
     for i, (name, val, logo, plate) in enumerate(ROWS):
         y = Y0 + i*(RH + GAP); cy = y + RH/2; top = i == 0
         d.rounded_rectangle((M, y, R_, y + RH), radius=16, fill=(12, 34, 56, 235), outline=(255, 255, 255, 34), width=2)
         x0 = R_ - (R_ - M)*val/ROWS[0][1]                             # bar length is the share of the winner's output
         d.rounded_rectangle((x0, y, R_, y + RH), radius=16, fill=(O if top else IDEA_BLUE) + (255,))
-        q = 62; qx = R_ - 14 - q                                      # rank square
+        q = 76; qx = R_ - 20 - q                                      # rank square
         d.rounded_rectangle((qx, cy - q/2, qx + q, cy + q/2), radius=10, fill=(N if top else DEEP) + (255,))
         up, dn, tw = ink(str(i + 1), fr, False)
         d.text((qx + q/2 - tw/2, cy + (up - dn)/2), str(i + 1), font=fr, fill=(Wh if top else O) + (255,), anchor='ls')
-        pw, pp = 176, 62; lx1 = qx - 16                               # the company's logo on its own plate
+        pw, pp = 180, 76; lx1 = qx - 18                               # the company's logo on its own plate
         d.rounded_rectangle((lx1 - pw, cy - pp/2, lx1, cy + pp/2), radius=10, fill=plate + (255,))
         lg = Image.open(os.path.join(HERE, logo)).convert('RGBA')
-        sc = min((pw - 24)*K/lg.width, (pp - (4 if lg.width == lg.height else 18))*K/lg.height)
+        sc = min((pw - 24)*K/lg.width, (pp - (4 if lg.width == lg.height else 22))*K/lg.height)
         lg = lg.resize((round(lg.width*sc), round(lg.height*sc)), Image.LANCZOS)
         cv.alpha_composite(lg, (round((lx1 - pw/2)*K - lg.width/2), round(cy*K - lg.height/2)))
         nx = lx1 - pw - 22; up, dn, nw = ink(name, fn)
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     d.ellipse((219 - 44, 705 - 44, 219 + 44, 705 + 44), outline=O + (255,), width=3)     # the toy tyre
     t_end, c_end = headline(d)
     end = table(cv); d = nc.Draw(cv)
-    t = 'الإنتاج السنوي التقريبي · إطارات ليغو صغيرة تُصنع لألعابها'; f = F(AR_BOLD, 24); up, dn, _ = ink(t, f)
+    t = 'أرقام سنوية تقريبية · إطارات ليغو صغيرة تُصنع لألعابها'; f = F(AR_BOLD, 24); up, dn, _ = ink(t, f)
     d.text((W/2, end + 26 + up), t, font=f, fill=SOFT + (255,), anchor='ms', direction='rtl', language='ar')
     print(f'headline 320-{round(t_end)}, chip ends {round(c_end)}, table {Y0}-{end}, note {end + 26}-{round(end + 26 + up + dn)}, footer icons from 1275')
     cv.convert('RGB').save(sys.argv[2], optimize=True); print(sys.argv[2], cv.size)
