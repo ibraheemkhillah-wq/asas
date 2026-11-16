@@ -78,7 +78,7 @@ cv.alpha_composite(tl, (lx, ly))
 blur_layer(cv, lambda d: d.ellipse((gx - S(40), gy - S(40), gx + S(40), gy + S(40)), fill=(120, 255, 180, 90)), 14)
 
 # the seat on the left, on the crossing, with a contact shadow
-st = seat(); SH = 670; sw = round(S(SH)*st.width/st.height); sx, sy = S(34), S(GROUND + 6 - SH)
+st = seat(); SH = 680; sw = round(S(SH)*st.width/st.height); sx, sy = S(24), S(GROUND + 6 - SH)
 st = st.resize((sw, S(SH)), Image.LANCZOS)
 blur_layer(cv, lambda d: d.ellipse((sx + S(20), sy + S(SH) - S(44), sx + sw + S(16), sy + S(SH) + S(18)), fill=(25, 45, 65, 170)), 16)
 cv.alpha_composite(st, (sx, sy))
@@ -99,7 +99,7 @@ f1 = F(AR_BLACK, S(84)); y = S(300)
 up = max(ink('الضوء', f1)[0], ink('الأخضر..', f1)[0]); dn = max(ink('الضوء', f1)[1], ink('الأخضر..', f1)[1]); b = y + up
 ar(d, (R_, b), 'الضوء', f1, N); x2 = R_ - ink('الضوء', f1)[2] - S(24)
 ar(d, (x2, b), 'الأخضر..', f1, GREEN); l1 = x2 - ink('الأخضر..', f1)[2]; y = b + dn + S(26)
-f2 = F(AR_BLACK, S(96)); up, dn, w2 = ink('لرحلة آمنة', f2); b = y + up; ar(d, (R_, b), 'لرحلة آمنة', f2, O); y = b + dn
+f2 = F(AR_BLACK, S(88)); up, dn, w2 = ink('لرحلة آمنة', f2); b = y + up; ar(d, (R_, b), 'لرحلة آمنة', f2, O); y = b + dn
 print('headline 300 -', round(y/K), '| left edges', round(l1/K), round((R_ - w2)/K))
 fs = F(AR_BOLD, S(32)); y += S(30)
 for t in ('لا تنطلق قبل أن يجلس', 'طفلك في مقعده'):
