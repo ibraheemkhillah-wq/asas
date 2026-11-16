@@ -2,10 +2,10 @@
 
 usage: python3 carseat_green.py <brand-kit dir> <out.png>
 Scene: Canva (carseat-green-street.jpg): a bright Istanbul street, zebra crossing in front, the Bosphorus Bridge
-in the haze. Seat: the company's own green seat (carseat-green-src.jpg, photo from the user), cut out with
-Canva's background remover (carseat-green-cutout.png); the straps hanging under its base are masked off.
-The traffic light is drawn here (Canva's image quota was cooling down): only its green lamp is lit, and that
-green is echoed in the headline. Layout in 1080 units; every line is placed from its measured ink box with at
+in the haze. Seat: the company's own green seat (carseat-green-src.jpg, photo from the user) re-shot by Canva as a
+studio product photo at a better angle and cut out (carseat-green-studio.png). Traffic light: Canva, cut out
+(carseat-green-light.png), only its green lamp lit; that green is echoed in the headline.
+Layout in 1080 units; every line is placed from its measured ink box with at
 least 24 units clear.
 """
 import sys, os
@@ -46,49 +46,19 @@ def veil(cv, fn, rgb=(255, 255, 255)):
 
 
 def seat():
-    """The cutout without the straps that hang under the base, with a little more depth and colour."""
-    im = Image.open(os.path.join(HERE, 'carseat-green-cutout.png')).convert('RGBA'); im = im.crop(im.getbbox())
-    a = np.array(im); h = a.shape[0]; cut = round(h*0.868)                 # the base ends here
-    lum = a[..., :3].mean(2); rows = np.arange(h)[:, None]
-    a[..., 3] = np.where((rows > round(h*0.80)) & (lum < 62), 0, a[..., 3])   # black straps below the cushion
-    a[cut:, :, 3] = 0
-    im = Image.fromarray(a); al = im.getchannel('A').filter(ImageFilter.MinFilter(5)).filter(ImageFilter.GaussianBlur(1.5))
-    rgb = ImageEnhance.Color(ImageEnhance.Contrast(im.convert('RGB')).enhance(1.10)).enhance(1.18)
-    im = rgb.convert('RGBA'); im.putalpha(al)
+    """The studio re-shoot of the company's seat (Canva, from the user's photo), cut out."""
+    im = Image.open(os.path.join(HERE, 'carseat-green-studio.png')).convert('RGBA')
     return im.crop(im.getbbox())
 
 
-def traffic_light(cx, top, ground, hw=116, hh=284):
-    """A signal on a pole, drawn at 2x and reduced: dark head, visors, red and amber off, green on. Units in, layer out."""
-    Q = 2*K; lay = Image.new('RGBA', (W*2, H*2), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
-    def q(v): return round(v*Q)
-    # pole and foot
-    pw = 16
-    for i in range(q(pw)):
-        t = i/q(pw); c = 46 + 70*np.exp(-((t - 0.32)/0.16)**2) - 22*t
-        d.line([(q(cx - pw/2) + i, q(top + hh - 10)), (q(cx - pw/2) + i, q(ground))], fill=(int(c*0.80), int(c*0.92), int(c*1.05), 255))
-    d.rounded_rectangle((q(cx - 26), q(ground - 12), q(cx + 26), q(ground + 4)), radius=q(5), fill=(34, 44, 56, 255))
-    # head: back plate, body
-    x0, x1 = cx - hw/2, cx + hw/2
-    d.rounded_rectangle((q(x0 - 9), q(top - 9), q(x1 + 9), q(top + hh + 9)), radius=q(26), fill=(22, 30, 40, 255))
-    body = Image.new('RGBA', (q(hw), q(hh)), (0, 0, 0, 0)); g = np.linspace(0, 1, q(hw))[None, :, None]
-    col = np.array((58, 72, 88), np.float32)*(1 - g) + np.array((28, 38, 50), np.float32)*g
-    body = Image.fromarray(np.repeat(col, q(hh), 0).astype(np.uint8)).convert('RGBA')
-    mk = Image.new('L', body.size, 0); ImageDraw.Draw(mk).rounded_rectangle((0, 0, q(hw) - 1, q(hh) - 1), radius=q(20), fill=255)
-    lay.paste(body, (q(x0), q(top)), mk)
-    r = 37; step = (hh - 2*r - 2*16)/2
-    lamps = [((120, 44, 46), (62, 24, 28)), ((128, 98, 40), (70, 52, 22)), ((190, 255, 214), (26, 196, 104))]
-    centres = []
-    for i, (cin, cout) in enumerate(lamps):
-        cy = top + 16 + r + i*step; centres.append(cy)
-        d.ellipse((q(cx - r - 5), q(cy - r - 5), q(cx + r + 5), q(cy + r + 5)), fill=(12, 16, 22, 255))
-        n = q(2*r); yy, xx = np.mgrid[0:n, 0:n].astype(np.float32)
-        rr = np.clip(np.sqrt((xx - n*0.42)**2 + (yy - n*0.40)**2)/(n*0.62), 0, 1)[..., None]
-        lens = np.array(cin, np.float32)*(1 - rr) + np.array(cout, np.float32)*rr
-        lm = Image.new('L', (n, n), 0); ImageDraw.Draw(lm).ellipse((0, 0, n - 1, n - 1), fill=255)
-        lay.paste(Image.fromarray(lens.astype(np.uint8)).convert('RGBA'), (q(cx - r), q(cy - r)), lm)
-        d.arc((q(cx - r - 8), q(cy - r - 9), q(cx + r + 8), q(cy + r + 7)), 195, 345, fill=(10, 14, 20, 255), width=q(9))   # visor
-    return lay.resize((W, H), Image.LANCZOS), centres[2]
+def traffic_light(head_h):
+    """The Canva traffic light with its pole shortened (a uniform stretch of pole is dropped) so the head can be
+    large; returns the image scaled so the head is head_h units tall, and the green lamp's centre in it (px)."""
+    im = Image.open(os.path.join(HERE, 'carseat-green-light.png')).convert('RGBA'); im = im.crop(im.getbbox())
+    top, bot = im.crop((0, 0, im.width, 1700)), im.crop((0, 3250, im.width, im.height))     # head + pole | pole + foot
+    out = Image.new('RGBA', (im.width, top.height + bot.height), (0, 0, 0, 0)); out.paste(top, (0, 0)); out.paste(bot, (0, top.height))
+    sc = S(head_h)/1500
+    return out.resize((round(out.width*sc), round(out.height*sc)), Image.LANCZOS), (271*sc, 1178*sc)
 
 
 # the street, pushed 40 units down so the hazy skyline sits under the text; the sky above continues upward
@@ -99,19 +69,20 @@ veil(cv, lambda y: (1 - y/620)*0.55)                                    # a brig
 veil(cv, lambda y: np.clip((y - 1076)/52, 0, 1)**1.1*0.96)                           # white floor for the call to action and footer
 
 # traffic light on the right, standing on the crossing
-GROUND = 1092; TX, TTOP = 928, 730
-tl, gy = traffic_light(TX, TTOP, GROUND)
-blur_layer(cv, lambda d: d.ellipse((S(TX - 60), S(GROUND - 8), S(TX + 60), S(GROUND + 12)), fill=(30, 50, 70, 130)), 8)
-blur_layer(cv, lambda d: d.ellipse((S(TX - 120), S(gy - 120), S(TX + 120), S(gy + 120)), fill=(40, 220, 120, 150)), 34)
-cv.alpha_composite(tl)
-blur_layer(cv, lambda d: d.ellipse((S(TX - 46), S(gy - 46), S(TX + 46), S(gy + 46)), fill=(120, 255, 180, 110)), 14)
+GROUND = 1096; TX = 936
+tl, (gcx, gcy) = traffic_light(280); lx, ly = S(TX) - tl.width//2, S(GROUND) - tl.height
+gx, gy = lx + gcx, ly + gcy
+blur_layer(cv, lambda d: d.ellipse((S(TX - 56), S(GROUND - 8), S(TX + 56), S(GROUND + 10)), fill=(30, 50, 70, 150)), 8)
+blur_layer(cv, lambda d: d.ellipse((gx - S(120), gy - S(120), gx + S(120), gy + S(120)), fill=(40, 220, 120, 140)), 34)
+cv.alpha_composite(tl, (lx, ly))
+blur_layer(cv, lambda d: d.ellipse((gx - S(40), gy - S(40), gx + S(40), gy + S(40)), fill=(120, 255, 180, 90)), 14)
 
 # the seat on the left, on the crossing, with a contact shadow
-st = seat(); SH = 600; sw = round(S(SH)*st.width/st.height); sx, sy = S(30), S(GROUND + 4 - SH)
+st = seat(); SH = 670; sw = round(S(SH)*st.width/st.height); sx, sy = S(34), S(GROUND + 6 - SH)
 st = st.resize((sw, S(SH)), Image.LANCZOS)
-blur_layer(cv, lambda d: d.ellipse((sx + S(10), sy + S(SH) - S(40), sx + sw + S(20), sy + S(SH) + S(22)), fill=(25, 45, 65, 170)), 16)
+blur_layer(cv, lambda d: d.ellipse((sx + S(20), sy + S(SH) - S(44), sx + sw + S(16), sy + S(SH) + S(18)), fill=(25, 45, 65, 170)), 16)
 cv.alpha_composite(st, (sx, sy))
-print('seat x', round(sx/K), '-', round((sx + sw)/K), 'y', round(sy/K), '-', round(sy/K) + SH, '| light head', TTOP, '-', TTOP + 284, 'x', TX - 67, '-', TX + 67)
+print('seat x', round(sx/K), '-', round((sx + sw)/K), 'y', round(sy/K), '-', round(sy/K) + SH, '| light x', round(lx/K), '-', round((lx + tl.width)/K), 'y', round(ly/K), '-', GROUND)
 
 d = ImageDraw.Draw(cv)
 # logo + «من خدماتنا» badge
@@ -134,7 +105,7 @@ fs = F(AR_BOLD, S(32)); y += S(30)
 for t in ('لا تنطلق قبل أن يجلس', 'طفلك في مقعده'):
     up, dn, ws = ink(t, fs); b = y + up; ar(d, (R_, b), t, fs, N); y = b + dn + S(18)
 y -= S(18)
-print('subline ends', round(y/K), 'left edge', round((R_ - ws)/K), '| seat top', round(sy/K), '| light top', TTOP - 9)
+print('subline ends', round(y/K), 'left edge', round((R_ - ws)/K), '| seat top', round(sy/K), '| light top', round(ly/K))
 
 # call to action and the terms chip on the white floor
 t = 'اطلب كرسي الأطفال مع حجزك في اسطنبول'; f = F(AR_BLACK, S(38)); up, dn, _ = ink(t, f); c_top = S(1126)
