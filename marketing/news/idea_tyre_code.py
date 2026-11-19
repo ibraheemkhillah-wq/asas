@@ -184,11 +184,44 @@ def moulded(cv, pts, size, text='255/55 R20 110V'):
     print('moulded: path length', round(arc[-1]), 'text', round(total))
 
 
+def moulded_persp(cv, E, th0, th1, size, text='255/55 R20 110V'):
+    """Mould `text` on the sidewall seen at an angle: the text is laid on a circle (radius ry) and the whole layer
+    is squeezed to the tyre's ellipse E=(cx, cy, rx, ry), so the letters lean and narrow with the tyre itself.
+    th0..th1: the span in degrees (screen, -90 = top). Returns the screen outline of a box round the text."""
+    cx, cy, rx, ry = E; R = ry; sq = rx/ry
+    to_scr = lambda x, y: (cx + (x - cx)*sq, y)
+    f = F(OX, size).real; adv = [f.getlength(ch)/K for ch in text]; total = sum(adv)
+    span = math.radians(th1 - th0)*R; th = math.radians(th0) + (span - total)/2/R
+    # soften the sidewall's own fine print under the text
+    band = Image.new('L', (W*K, H*K), 0); bd = ImageDraw.Draw(band)
+    arcpts = [to_scr(cx + R*math.cos(t), cy + R*math.sin(t)) for t in np.linspace(math.radians(th0), math.radians(th1), 60)]
+    bd.line([(x*K, y*K) for x, y in arcpts], fill=255, width=round(size*1.3*sq*K))
+    cv.paste(cv.filter(ImageFilter.GaussianBlur(6*K)), (0, 0), band.filter(ImageFilter.GaussianBlur(5*K)))
+    lay = Image.new('RGBA', (W*K, H*K), (0, 0, 0, 0))
+    for ch, a in zip(text, adv):
+        t = th + a/2/R; x, y = cx + R*math.cos(t), cy + R*math.sin(t)
+        g = Image.new('RGBA', (int(a*K*1.8) + 30, int(size*K*2.2)), (0, 0, 0, 0)); gd = ImageDraw.Draw(g); gx, gy = g.width/2, g.height/2
+        for (ox, oy), col in (((-1.4, -1.4), (138, 134, 126, 255)), ((1.4, 1.4), (6, 6, 8, 255)), ((0, 0), (58, 58, 62, 255))):
+            gd.text((gx + ox*K, gy + oy*K), ch, font=f, fill=col, anchor='mm')
+        r = g.rotate(-(math.degrees(t) + 90), resample=Image.BICUBIC, expand=True)
+        lay.alpha_composite(r, (round(x*K - r.width/2), round(y*K - r.height/2)))
+        th += a/R
+    # squeeze x about cx: output X samples input at cx + (X - cx)/sq
+    lay = lay.transform(lay.size, Image.AFFINE, (1/sq, 0, cx*K*(1 - 1/sq), 0, 1, 0), Image.BICUBIC)
+    cv.alpha_composite(lay.filter(ImageFilter.GaussianBlur(0.4*K)))
+    # box: an annular sector round the text, mapped to the screen
+    t0 = math.radians(th0) + (span - total)/2/R - 0.03; t1 = t0 + total/R + 0.06; h = size*0.75
+    outer = [to_scr(cx + (R + h)*math.cos(t), cy + (R + h)*math.sin(t)) for t in np.linspace(t0, t1, 40)]
+    inner = [to_scr(cx + (R - h)*math.cos(t), cy + (R - h)*math.sin(t)) for t in np.linspace(t1, t0, 40)]
+    tm = (t0 + t1)/2
+    return outer + inner, to_scr(cx + (R - h)*math.cos(tm), cy + (R - h)*math.sin(tm))
+
+
 def cover():
     cv = shifted('tyre-1-cover-istanbul.jpg', 330)
     # the code moulded into the sidewall's upper-right band (the user's circled spot), before the grading
     # mid-line of the band between the tread edge and the rim edge the user marked
-    moulded(cv, [(665, 701), (726, 723), (787, 760), (834, 800), (856, 824)], 26)
+    box, foot = moulded_persp(cv, (690, 1055, 218, 344), -92, -44, 30)
     shade(cv, [(lambda y: (1 - y/620)**1.2*0.90, DEEP), (lambda y: ((y - 1110)/150)*0.92, DEEP)])
     d = D(cv); nc.chrome(cv, d, 1, TOTAL); d = D(cv)
     lines = [('ماذا تعني الأرقام', Wh, 74), ('على إطار سيارتك؟', O, 92)]
@@ -202,9 +235,11 @@ def cover():
     glass(cv, (W/2 - pw/2, p0, W/2 + pw/2, p0 + ph), radius=58, fill=DEEP + (225,), outline=O + (220,))
     code_strip(cv, W/2, p0 + ph/2 + 25, 60)
     # a leader from the moulded code down to the plate
-    d = D(cv); q0, q1 = (770, 788), (668, p0)
-    d.line([q0, ((q0[0] + q1[0])/2 + 14, (q0[1] + q1[1])/2), q1], fill=O + (255,), width=3, joint='curve')
-    d.ellipse((q0[0] - 7, q0[1] - 7, q0[0] + 7, q0[1] + 7), fill=O + (255,))
+    d = D(cv); d.polygon(box, outline=O + (255,), width=3)
+    q0, q1 = foot, (668, p0)
+    d.line([q0, q1], fill=O + (255,), width=3)
+    d.ellipse((q0[0] - 6, q0[1] - 6, q0[0] + 6, q0[1] + 6), fill=O + (255,))
+    print('code box', [tuple(round(v) for v in box[i]) for i in (0, 39, 40, 79)], 'foot', tuple(round(v) for v in foot))
     print('cover: title 300 -', round(y), '| plate', p0, '-', p0 + ph)
     return cv
 
