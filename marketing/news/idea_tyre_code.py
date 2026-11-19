@@ -187,7 +187,8 @@ def moulded(cv, pts, size, text='255/55 R20 110V'):
 def cover():
     cv = shifted('tyre-1-cover-istanbul.jpg', 330)
     # the code moulded into the sidewall's upper-right band (the user's circled spot), before the grading
-    moulded(cv, [(690, 720), (745, 729), (797, 751), (838, 790), (866, 838), (884, 892)], 29)
+    # mid-line of the band between the tread edge and the rim edge the user marked
+    moulded(cv, [(665, 701), (726, 723), (787, 760), (834, 800), (856, 824)], 26)
     shade(cv, [(lambda y: (1 - y/620)**1.2*0.90, DEEP), (lambda y: ((y - 1110)/150)*0.92, DEEP)])
     d = D(cv); nc.chrome(cv, d, 1, TOTAL); d = D(cv)
     lines = [('ماذا تعني الأرقام', Wh, 74), ('على إطار سيارتك؟', O, 92)]
@@ -200,6 +201,10 @@ def cover():
     pw, ph = 620, 116; p0 = 1110
     glass(cv, (W/2 - pw/2, p0, W/2 + pw/2, p0 + ph), radius=58, fill=DEEP + (225,), outline=O + (220,))
     code_strip(cv, W/2, p0 + ph/2 + 25, 60)
+    # a leader from the moulded code down to the plate
+    d = D(cv); q0, q1 = (770, 788), (668, p0)
+    d.line([q0, ((q0[0] + q1[0])/2 + 14, (q0[1] + q1[1])/2), q1], fill=O + (255,), width=3, joint='curve')
+    d.ellipse((q0[0] - 7, q0[1] - 7, q0[0] + 7, q0[1] + 7), fill=O + (255,))
     print('cover: title 300 -', round(y), '| plate', p0, '-', p0 + ph)
     return cv
 
