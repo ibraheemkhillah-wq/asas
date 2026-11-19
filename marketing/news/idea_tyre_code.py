@@ -159,56 +159,103 @@ def shifted(name, shift):
 
 
 # ---------------------------------------------------------------------------------------------------------------
+def curved_code(cv, cx, cy, rx, ry, t_mid, size, text='255/55 R20 110V'):
+    """Mould `text` into the tyre's sidewall along the ellipse (cx, cy, rx, ry), centred on angle t_mid (degrees,
+    screen coords, 90 = bottom), letter tops pointing to the hub. Returns the text's bounding box in units."""
+    f = F(OX, size).real
+    adv = [f.getlength(ch) for ch in text]; total = sum(adv)/K     # arc length the text needs (units)
+    ts = np.radians(np.linspace(0, 360, 3601)); px = cx + rx*np.cos(ts); py = cy + ry*np.sin(ts)
+    seg = np.hypot(np.diff(px), np.diff(py)); arc = np.concatenate([[0], np.cumsum(seg)])
+    i0 = int(round(t_mid*10)); s_mid = arc[i0]
+    s = s_mid + total/2                                         # text runs right-to-left in angle at the bottom (left -> right on screen)
+    lay = Image.new('RGBA', (W*K, H*K), (0, 0, 0, 0)); boxes = []
+    for ch, a in zip(text, adv):
+        sc = s - a/K/2; j = int(np.searchsorted(arc, sc)); j = min(max(j, 1), len(px) - 2)
+        x, y = px[j], py[j]; tx, ty = px[j + 1] - px[j - 1], py[j + 1] - py[j - 1]
+        ang = math.degrees(math.atan2(ty, tx)) + 180             # baseline direction (screen left -> right at the bottom)
+        g = Image.new('RGBA', (int(a*1.6) + 20, int(size*K*2)), (0, 0, 0, 0)); gd = ImageDraw.Draw(g)
+        gx, gy = g.width/2, g.height/2
+        for (ox, oy), col in (((-2, -2), (120, 118, 112, 255)), ((2, 2), (4, 4, 6, 255)), ((0, 0), (62, 62, 66, 255))):
+            gd.text((gx + ox*K, gy + oy*K), ch, font=f, fill=col, anchor='mm')
+        r = g.rotate(-ang, resample=Image.BICUBIC, expand=True)
+        lay.alpha_composite(r, (round(x*K - r.width/2), round(y*K - r.height/2))); boxes.append((x, y))
+        s -= a/K
+    cv.alpha_composite(lay.filter(ImageFilter.GaussianBlur(0.5*K)))
+    xs = [b[0] for b in boxes]; ys = [b[1] for b in boxes]
+    return (min(xs) - size*0.5, min(ys) - size*0.6, max(xs) + size*0.5, max(ys) + size*0.6)
+
+
 def cover():
-    cv = shifted('tyre-1-cover-istanbul.jpg', 330)
-    shade(cv, [(lambda y: (1 - y/620)**1.2*0.90, DEEP), (lambda y: ((y - 1110)/150)*0.92, DEEP)])
+    cv = nc.bg('tyre-1-cover-istanbul.jpg')
+    # the sidewall's own small print at the bottom is hidden under a soft rubber patch, then our code is moulded in
+    TY = dict(cx=676, cy=738, rx=207, ry=372)
+    patch = Image.new('L', (W*K, H*K), 0); pd = ImageDraw.Draw(patch)
+    pd.ellipse(((TY['cx'] - TY['rx'] - 34)*K, (TY['cy'] - TY['ry'] - 34)*K, (TY['cx'] + TY['rx'] + 34)*K, (TY['cy'] + TY['ry'] + 34)*K), fill=255)
+    pd.ellipse(((TY['cx'] - TY['rx'] + 30)*K, (TY['cy'] - TY['ry'] + 30)*K, (TY['cx'] + TY['rx'] - 30)*K, (TY['cy'] + TY['ry'] - 30)*K), fill=0)
+    pd.rectangle((0, 0, W*K, 1000*K), fill=0); pd.rectangle((800*K, 0, W*K, H*K), fill=0)
+    soft = cv.filter(ImageFilter.GaussianBlur(10*K)); cv.paste(soft, (0, 0), patch.filter(ImageFilter.GaussianBlur(6*K)))
+    box = curved_code(cv, t_mid=112, size=34, **TY)
+    shade(cv, [(lambda y: (1 - y/560)**1.3*0.80, DEEP), (lambda y: ((y - 1190)/110)*0.9, DEEP)])
     d = D(cv); nc.chrome(cv, d, 1, TOTAL); d = D(cv)
-    lines = [('ماذا تعني الأرقام', Wh, 74), ('على إطار سيارتك؟', O, 92)]
+    # headline, right-aligned over the car's dark wing so Galata Tower stays clear on the left
+    lines = [('ماذا تعني الأرقام', Wh, 68), ('على إطار سيارتك؟', O, 80)]
     y = 300; draws = []
     for t, col, size in lines:
-        f = F(AR_BLACK, size); u, dn, _ = ink(t, f); b = y + u; draws.append(((W/2, b), t, f, 'ms', col)); y = b + dn + 26
+        f = F(AR_BLACK, size); u, dn, w = ink(t, f); b = y + u; draws.append(((R_, b), t, f, 'rs', col)); y = b + dn + 26; lw = w
     y -= 26
     halo(cv, [(xy, t, f, an) for xy, t, f, an, _ in draws]); d = D(cv)
     for xy, t, f, an, col in draws: ar(d, xy, t, f, col, an)
-    # the code on a dark glass plate, low on the cobblestones
-    pw, ph = 620, 116; p0 = 1110
-    glass(cv, (W/2 - pw/2, p0, W/2 + pw/2, p0 + ph), radius=58, fill=DEEP + (225,), outline=O + (220,))
-    code_strip(cv, W/2, p0 + ph/2 + 25, 60)
-    print('cover: title 300 -', round(y), '| plate', p0, '-', p0 + ph, '| Galata spire ~', 190 + 330)
+    # zoom: a frame round the moulded code, two leader lines, and the close-up (Canva macro of the same code)
+    bx0, by0, bx1, by1 = box
+    ix0, iy0, iw = 64, 880, 420; mac = Image.open(os.path.join(HERE, 'tyre-2-code-macro.jpg')).convert('RGB')
+    crop = mac.crop((80, 1050, 2130, 1520)); ih = round(iw*crop.height/crop.width)
+    sh, sd = layer(); sd.rounded_rectangle((ix0 - 6, iy0 + 8, ix0 + iw + 6, iy0 + ih + 18), radius=22, fill=(0, 0, 0, 150))
+    cv.alpha_composite(sh.filter(ImageFilter.GaussianBlur(14*K))); d = D(cv)
+    d.line([(ix0 + iw, iy0 + 10), (bx0, by0)], fill=O + (255,), width=3)
+    d.line([(ix0 + iw, iy0 + ih - 10), (bx0, by1)], fill=O + (255,), width=3)
+    m = Image.new('L', (iw*K, ih*K), 0); ImageDraw.Draw(m).rounded_rectangle((0, 0, iw*K - 1, ih*K - 1), radius=18*K, fill=255)
+    cv.paste(crop.resize((iw*K, ih*K), Image.LANCZOS), (ix0*K, iy0*K), m); d = D(cv)
+    d.rounded_rectangle((ix0 - 4, iy0 - 4, ix0 + iw + 4, iy0 + ih + 4), radius=21, outline=O + (255,), width=4)
+    d.rounded_rectangle((bx0, by0, bx1, by1), radius=12, outline=O + (255,), width=3)
+    t = 'اقرأ هذا الرمز على إطارك'; f = F(AR_BOLD, 28); u, dn, w = ink(t, f); b = iy0 - 22 - dn
+    halo(cv, [((ix0 + iw/2, b), t, f, 'ms')], r=10); d = D(cv); ar(d, (ix0 + iw/2, b), t, f, Wh, 'ms')
+    print('cover: title 300 -', round(y), 'left edge', round(R_ - lw), '| inset', iy0, '-', iy0 + ih, '| code box', [round(v) for v in box], '| label top', round(b - u))
     return cv
 
 
 def code_map():
-    cv = nc.bg('tyre-2-sidewall.jpg')
-    shade(cv, [(lambda y: (1 - y/360)**1.3*0.85, DEEP), (lambda y: ((y - 720)/120)*0.92, DEEP)])
+    cv = nc.bg('tyre-2-code-macro.jpg')
+    shade(cv, [(lambda y: (1 - y/420)**1.3*0.80, DEEP), (lambda y: ((y - 790)/90)*0.94, DEEP)])
     d = D(cv); nc.chrome(cv, d, 2, TOTAL); d = D(cv)
-    end = stack(d, [('كل رقم على الإطار', F(AR_BLACK, 62), Wh), ('له معنى', F(AR_BLACK, 62), O)], 210, R_, 'rs')
-    # the code moulded into the rubber band, with numbered markers under each part
-    base = 600
-    pos, up = code_strip(cv, W/2, base, 118, emboss=True)
-    d = D(cv); keys = ['w', 'h', 'r', 'd', 'load', 'speed']
-    for n, k in enumerate(keys, 1):
-        x0, x1 = pos[k]; cx = (x0 + x1)/2
-        d.line([(x0 + 2, base + 26), (x1 - 2, base + 26)], fill=O + (255,), width=4)
-        d.line([(cx, base + 26), (cx, base + 52)], fill=O + (255,), width=3)
-        badge(d, cx, base + 76, n)
-    print('code_map: title 210 -', round(end), '| code ink', round(base - up), '-', base, '| badges to', base + 98)
-    # six cards: number, the part in orange, what it means
+    lines = [('كل رقم على الإطار', F(AR_BLACK, 62), Wh), ('له معنى', F(AR_BLACK, 62), O)]
+    y = 210 - 24; draws = []
+    for t, f, col in lines:
+        u, dn, _ = ink(t, f); b = y + 24 + u; draws.append(((R_, b), t, f, 'rs', col)); y = b + dn
+    halo(cv, [(xy, t, f, an) for xy, t, f, an, _ in draws], r=14); d = D(cv)
+    for xy, t, f, an, col in draws: ar(d, xy, t, f, col, an)
+    # the parts as moulded in the photo (units): x range and the ink bottom of each
+    parts = [(60, 270, 682), (345, 500, 678), (530, 608, 688), (612, 755, 696), (795, 935, 720), (940, 1052, 735)]
+    for n, (x0, x1, yb) in enumerate(parts, 1):
+        cx = (x0 + x1)/2; yl = yb + 16
+        d.line([(x0 + 4, yl), (x1 - 4, yl)], fill=O + (255,), width=4)
+        d.line([(cx, yl), (cx, yl + 16)], fill=O + (255,), width=3)
+        badge(d, cx, yl + 16 + 22, n)
+    print('code_map: title 210 -', round(y), '| badges to', 735 + 16 + 16 + 44)
     items = [('255', 'عرض الإطار', 'بالمليمتر'), ('55', 'ارتفاع الجانب', 'نسبةً إلى العرض'), ('R', 'إطار شعاعي', 'Radial'),
              ('20', 'قطر الجنط', 'بالإنش'), ('110', 'مؤشر الحمولة', 'أقصى وزن للإطار'), ('V', 'رمز السرعة', 'أقصى سرعة له')]
-    g0 = 750; gw = (R_ - M - 2*20)/3; gh = 220
+    g0 = 840; gw = (R_ - M - 2*20)/3; gh = 190
     for i, (code, name, sub) in enumerate(items):
         col, row = i % 3, i//3
         x1 = R_ - col*(gw + 20); x0 = x1 - gw; y0 = g0 + row*(gh + 20)
-        glass(cv, (x0, y0, x1, y0 + gh))
-        d = D(cv); badge(d, x1 - 34, y0 + 34, i + 1, 18)
-        fc = F(OX, 62); u, dn, w = ink(code, fc, False); b = y0 + 40 + u
+        glass(cv, (x0, y0, x1, y0 + gh), fill=CARD + (230,))
+        d = D(cv); badge(d, x1 - 32, y0 + 32, i + 1, 17)
+        fc = F(OX, 54); u, dn, w = ink(code, fc, False); b = y0 + 30 + u
         lt(d, (x0 + gw/2 - w/2, b), code, fc, O)
-        fn = F(AR_BLACK, 30); u2, d2, _ = ink(name, fn); b2 = b + dn + 26 + u2; ar(d, (x0 + gw/2, b2), name, fn, Wh, 'ms')
-        fs = F(AR_BOLD, 22) if not sub.isascii() else F(OX6, 22)
-        u3, d3, _ = ink(sub, fs, not sub.isascii()); b3 = b2 + d2 + 18 + u3
+        fn = F(AR_BLACK, 28); u2, d2, _ = ink(name, fn); b2 = b + dn + 24 + u2; ar(d, (x0 + gw/2, b2), name, fn, Wh, 'ms')
+        fs = F(AR_BOLD, 21) if not sub.isascii() else F(OX6, 21)
+        u3, d3, _ = ink(sub, fs, not sub.isascii()); b3 = b2 + d2 + 16 + u3
         (ar if not sub.isascii() else lt)(d, (x0 + gw/2, b3), sub, fs, SOFT, 'ms')
-        if i in (0, 3): print(f'  card row {row}: {y0}-{y0 + gh}, code {round(b - u)}-{round(b + dn)}, name to {round(b2 + d2)}, sub to {round(b3 + d3)}')
+        if i in (0, 3): print(f'  card row {row}: {y0}-{y0 + gh}, sub ends {round(b3 + d3)}')
     return cv
 
 
