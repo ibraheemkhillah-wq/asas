@@ -71,15 +71,15 @@ d.polygon([(bx, by + bh - S(22)), (bx, by + bh), (bx + S(22), by + bh)], fill=O+
 d.text((bx + bw/2, by + bh/2 + S(2)), label, font=fb, fill=Wh+(255,), anchor='mm', direction='rtl', language='ar')
 
 # headline, centred, starting low
-y = S(290); f = F(AR_BLACK, S(64))
+y = S(222); f = F(AR_BLACK, S(64))
 a1, a2 = 'ماذا يعني لون ', 'دخان العادم؟'
 u1, d1, w1 = ink(a1, f); u2, d2, w2 = ink(a2, f); up, dn = max(u1, u2), max(d1, d2); b = y + up
 x0 = W/2 + (w1 + w2)/2; ar(d, (x0, b), a1, f, N); ar(d, (x0 - w1, b), a2, f, O)
 y = b + dn
-print('headline 290 -', round(y/K))
+print('headline 222 -', round(y/K))
 
 # 2x2 cards
-G0 = y + S(40); GAP = S(24); CW = (R_ - M - GAP)//2; PH = S(222); TXT = S(110); CH = PH + TXT
+G0 = y + S(40); GAP = S(24); CW = (R_ - M - GAP)//2; PH = S(252); TXT = S(110); CH = PH + TXT
 fn = F(AR_BLACK, S(26)); fm = F(AR_BOLD, S(22))
 for i, (name, sw, photo, meaning) in enumerate(CARDS):
     cx0 = R_ - CW - (i % 2)*(CW + GAP); cy0 = G0 + (i//2)*(CH + GAP)
