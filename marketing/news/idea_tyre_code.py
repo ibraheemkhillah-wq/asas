@@ -159,67 +159,48 @@ def shifted(name, shift):
 
 
 # ---------------------------------------------------------------------------------------------------------------
-def curved_code(cv, cx, cy, rx, ry, t_mid, size, text='255/55 R20 110V'):
-    """Mould `text` into the tyre's sidewall along the ellipse (cx, cy, rx, ry), centred on angle t_mid (degrees,
-    screen coords, 90 = bottom), letter tops pointing to the hub. Returns the text's bounding box in units."""
-    f = F(OX, size).real
-    adv = [f.getlength(ch) for ch in text]; total = sum(adv)/K     # arc length the text needs (units)
-    ts = np.radians(np.linspace(0, 360, 3601)); px = cx + rx*np.cos(ts); py = cy + ry*np.sin(ts)
-    seg = np.hypot(np.diff(px), np.diff(py)); arc = np.concatenate([[0], np.cumsum(seg)])
-    i0 = int(round(t_mid*10)); s_mid = arc[i0]
-    s = s_mid + total/2                                         # text runs right-to-left in angle at the bottom (left -> right on screen)
-    lay = Image.new('RGBA', (W*K, H*K), (0, 0, 0, 0)); boxes = []
+def moulded(cv, pts, size, text='255/55 R20 110V'):
+    """Mould `text` into the rubber along the polyline `pts` (units, the sidewall's mid-line, left to right),
+    centred on it; letter tops point away from the hub, as on a real tyre."""
+    from scipy.interpolate import splprep, splev
+    P = np.array(pts, float); tck, _ = splprep([P[:, 0], P[:, 1]], s=0, k=3)
+    u = np.linspace(0, 1, 4000); px, py = splev(u, tck)
+    arc = np.concatenate([[0], np.cumsum(np.hypot(np.diff(px), np.diff(py)))])
+    f = F(OX, size).real; adv = [f.getlength(ch)/K for ch in text]; total = sum(adv)
+    # soften the sidewall's own fine print under the text: blur a band along the path
+    band = Image.new('L', (W*K, H*K), 0); ImageDraw.Draw(band).line([(x*K, y*K) for x, y in zip(px[::40], py[::40])], fill=255, width=round(size*1.5*K))
+    cv.paste(cv.filter(ImageFilter.GaussianBlur(6*K)), (0, 0), band.filter(ImageFilter.GaussianBlur(5*K)))
+    lay = Image.new('RGBA', (W*K, H*K), (0, 0, 0, 0)); s0 = (arc[-1] - total)/2
     for ch, a in zip(text, adv):
-        sc = s - a/K/2; j = int(np.searchsorted(arc, sc)); j = min(max(j, 1), len(px) - 2)
-        x, y = px[j], py[j]; tx, ty = px[j + 1] - px[j - 1], py[j + 1] - py[j - 1]
-        ang = math.degrees(math.atan2(ty, tx)) + 180             # baseline direction (screen left -> right at the bottom)
-        g = Image.new('RGBA', (int(a*1.6) + 20, int(size*K*2)), (0, 0, 0, 0)); gd = ImageDraw.Draw(g)
-        gx, gy = g.width/2, g.height/2
-        for (ox, oy), col in (((-2, -2), (120, 118, 112, 255)), ((2, 2), (4, 4, 6, 255)), ((0, 0), (62, 62, 66, 255))):
+        sc = s0 + a/2; j = min(max(int(np.searchsorted(arc, sc)), 1), len(px) - 2)
+        ang = math.degrees(math.atan2(py[j + 1] - py[j - 1], px[j + 1] - px[j - 1]))
+        g = Image.new('RGBA', (int(a*K*1.8) + 30, int(size*K*2.2)), (0, 0, 0, 0)); gd = ImageDraw.Draw(g); gx, gy = g.width/2, g.height/2
+        for (ox, oy), col in (((-1.4, -1.4), (138, 134, 126, 255)), ((1.4, 1.4), (6, 6, 8, 255)), ((0, 0), (58, 58, 62, 255))):
             gd.text((gx + ox*K, gy + oy*K), ch, font=f, fill=col, anchor='mm')
         r = g.rotate(-ang, resample=Image.BICUBIC, expand=True)
-        lay.alpha_composite(r, (round(x*K - r.width/2), round(y*K - r.height/2))); boxes.append((x, y))
-        s -= a/K
-    cv.alpha_composite(lay.filter(ImageFilter.GaussianBlur(0.5*K)))
-    xs = [b[0] for b in boxes]; ys = [b[1] for b in boxes]
-    return (min(xs) - size*0.5, min(ys) - size*0.6, max(xs) + size*0.5, max(ys) + size*0.6)
+        lay.alpha_composite(r, (round(px[j]*K - r.width/2), round(py[j]*K - r.height/2)))
+        s0 += a
+    cv.alpha_composite(lay.filter(ImageFilter.GaussianBlur(0.4*K)))
+    print('moulded: path length', round(arc[-1]), 'text', round(total))
 
 
 def cover():
-    cv = nc.bg('tyre-1-cover-istanbul.jpg')
-    # the sidewall's own small print at the bottom is hidden under a soft rubber patch, then our code is moulded in
-    TY = dict(cx=676, cy=738, rx=207, ry=372)
-    patch = Image.new('L', (W*K, H*K), 0); pd = ImageDraw.Draw(patch)
-    pd.ellipse(((TY['cx'] - TY['rx'] - 34)*K, (TY['cy'] - TY['ry'] - 34)*K, (TY['cx'] + TY['rx'] + 34)*K, (TY['cy'] + TY['ry'] + 34)*K), fill=255)
-    pd.ellipse(((TY['cx'] - TY['rx'] + 30)*K, (TY['cy'] - TY['ry'] + 30)*K, (TY['cx'] + TY['rx'] - 30)*K, (TY['cy'] + TY['ry'] - 30)*K), fill=0)
-    pd.rectangle((0, 0, W*K, 1000*K), fill=0); pd.rectangle((800*K, 0, W*K, H*K), fill=0)
-    soft = cv.filter(ImageFilter.GaussianBlur(10*K)); cv.paste(soft, (0, 0), patch.filter(ImageFilter.GaussianBlur(6*K)))
-    box = curved_code(cv, t_mid=112, size=34, **TY)
-    shade(cv, [(lambda y: (1 - y/560)**1.3*0.80, DEEP), (lambda y: ((y - 1190)/110)*0.9, DEEP)])
+    cv = shifted('tyre-1-cover-istanbul.jpg', 330)
+    # the code moulded into the sidewall's upper-right band (the user's circled spot), before the grading
+    moulded(cv, [(690, 720), (745, 729), (797, 751), (838, 790), (866, 838), (884, 892)], 29)
+    shade(cv, [(lambda y: (1 - y/620)**1.2*0.90, DEEP), (lambda y: ((y - 1110)/150)*0.92, DEEP)])
     d = D(cv); nc.chrome(cv, d, 1, TOTAL); d = D(cv)
-    # headline, right-aligned over the car's dark wing so Galata Tower stays clear on the left
-    lines = [('ماذا تعني الأرقام', Wh, 68), ('على إطار سيارتك؟', O, 80)]
+    lines = [('ماذا تعني الأرقام', Wh, 74), ('على إطار سيارتك؟', O, 92)]
     y = 300; draws = []
     for t, col, size in lines:
-        f = F(AR_BLACK, size); u, dn, w = ink(t, f); b = y + u; draws.append(((W/2, b), t, f, 'ms', col)); y = b + dn + 26; lw = w
+        f = F(AR_BLACK, size); u, dn, _ = ink(t, f); b = y + u; draws.append(((W/2, b), t, f, 'ms', col)); y = b + dn + 26
     y -= 26
     halo(cv, [(xy, t, f, an) for xy, t, f, an, _ in draws]); d = D(cv)
     for xy, t, f, an, col in draws: ar(d, xy, t, f, col, an)
-    # zoom: a frame round the moulded code, two leader lines, and the close-up (Canva macro of the same code)
-    bx0, by0, bx1, by1 = box
-    ix0, iy0, iw = 64, 880, 420; mac = Image.open(os.path.join(HERE, 'tyre-2-code-macro.jpg')).convert('RGB')
-    crop = mac.crop((80, 1050, 2130, 1520)); ih = round(iw*crop.height/crop.width)
-    sh, sd = layer(); sd.rounded_rectangle((ix0 - 6, iy0 + 8, ix0 + iw + 6, iy0 + ih + 18), radius=22, fill=(0, 0, 0, 150))
-    cv.alpha_composite(sh.filter(ImageFilter.GaussianBlur(14*K))); d = D(cv)
-    d.line([(ix0 + iw, iy0 + 10), (bx0, by0)], fill=O + (255,), width=3)
-    d.line([(ix0 + iw, iy0 + ih - 10), (bx0, by1)], fill=O + (255,), width=3)
-    m = Image.new('L', (iw*K, ih*K), 0); ImageDraw.Draw(m).rounded_rectangle((0, 0, iw*K - 1, ih*K - 1), radius=18*K, fill=255)
-    cv.paste(crop.resize((iw*K, ih*K), Image.LANCZOS), (ix0*K, iy0*K), m); d = D(cv)
-    d.rounded_rectangle((ix0 - 4, iy0 - 4, ix0 + iw + 4, iy0 + ih + 4), radius=21, outline=O + (255,), width=4)
-    d.rounded_rectangle((bx0, by0, bx1, by1), radius=12, outline=O + (255,), width=3)
-    t = 'اقرأ هذا الرمز على إطارك'; f = F(AR_BOLD, 28); u, dn, w = ink(t, f); b = iy0 - 22 - dn
-    halo(cv, [((ix0 + iw/2, b), t, f, 'ms')], r=10); d = D(cv); ar(d, (ix0 + iw/2, b), t, f, Wh, 'ms')
-    print('cover: title 300 -', round(y), 'left edge', round(W/2 - lw/2), '| inset', iy0, '-', iy0 + ih, '| code box', [round(v) for v in box], '| label top', round(b - u))
+    pw, ph = 620, 116; p0 = 1110
+    glass(cv, (W/2 - pw/2, p0, W/2 + pw/2, p0 + ph), radius=58, fill=DEEP + (225,), outline=O + (220,))
+    code_strip(cv, W/2, p0 + ph/2 + 25, 60)
+    print('cover: title 300 -', round(y), '| plate', p0, '-', p0 + ph)
     return cv
 
 
