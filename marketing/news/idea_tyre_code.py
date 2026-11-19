@@ -201,7 +201,7 @@ def cover():
     lines = [('ماذا تعني الأرقام', Wh, 68), ('على إطار سيارتك؟', O, 80)]
     y = 300; draws = []
     for t, col, size in lines:
-        f = F(AR_BLACK, size); u, dn, w = ink(t, f); b = y + u; draws.append(((R_, b), t, f, 'rs', col)); y = b + dn + 26; lw = w
+        f = F(AR_BLACK, size); u, dn, w = ink(t, f); b = y + u; draws.append(((W/2, b), t, f, 'ms', col)); y = b + dn + 26; lw = w
     y -= 26
     halo(cv, [(xy, t, f, an) for xy, t, f, an, _ in draws]); d = D(cv)
     for xy, t, f, an, col in draws: ar(d, xy, t, f, col, an)
@@ -219,7 +219,7 @@ def cover():
     d.rounded_rectangle((bx0, by0, bx1, by1), radius=12, outline=O + (255,), width=3)
     t = 'اقرأ هذا الرمز على إطارك'; f = F(AR_BOLD, 28); u, dn, w = ink(t, f); b = iy0 - 22 - dn
     halo(cv, [((ix0 + iw/2, b), t, f, 'ms')], r=10); d = D(cv); ar(d, (ix0 + iw/2, b), t, f, Wh, 'ms')
-    print('cover: title 300 -', round(y), 'left edge', round(R_ - lw), '| inset', iy0, '-', iy0 + ih, '| code box', [round(v) for v in box], '| label top', round(b - u))
+    print('cover: title 300 -', round(y), 'left edge', round(W/2 - lw/2), '| inset', iy0, '-', iy0 + ih, '| code box', [round(v) for v in box], '| label top', round(b - u))
     return cv
 
 
