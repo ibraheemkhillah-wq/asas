@@ -1,7 +1,8 @@
 """«عندك فكرة»: how to read the numbers on a tyre (255/55 R20 110V + DOT date) — seven DARK slides, 2160x2700.
 
 usage: python3 idea_tyre_code.py <brand-kit dir> <out dir>
-Photos: Canva AI (tyre-*.jpg). The full code «255/55 R20 110V» runs through the carousel as a strip; each slide
+Photos: Canva AI (tyre-*.jpg): Istanbul cover (Galata Tower), a real studio wheel for the size slide,
+a Chery on the Bosphorus highway carrying our plate (logo + TR strip) for the speed slide. The full code «255/55 R20 110V» runs through the carousel as a strip; each slide
 lights up the part it explains. Facts: R = radial construction; load index 110 = 1,060 kg per tyre; speed
 symbol V = 240 km/h; the last four DOT digits are week + year of manufacture.
 Layout in 1080 units; every line is placed from its measured ink box with at least 24 units clear.
@@ -99,20 +100,81 @@ def kicker(d, t, y=196):
     return y + h
 
 
+
+def halo(cv, draws, r=16, alpha=235):
+    """A dark blurred halo behind text so orange/white reads on any photo. draws: [(xy, text, font, anchor)]."""
+    lay = Image.new('L', (W*K, H*K), 0); ld = ImageDraw.Draw(lay)
+    for (x, y), t, f, anchor in draws:
+        ld.text((x*K, y*K), t, font=f.real, fill=255, anchor=anchor, direction='rtl', language='ar')
+    lay = lay.filter(ImageFilter.MaxFilter(2*round(r*0.6*K/2) + 1)).filter(ImageFilter.GaussianBlur(r*K))
+    dark = Image.new('RGBA', (W*K, H*K), DEEP + (0,)); dark.putalpha(lay.point(lambda v: min(255, int(v*alpha/255*1.6))))
+    cv.alpha_composite(dark)
+
+
+def perspective_coeffs(dst, src):
+    A = []
+    for (x, y), (u, v) in zip(dst, src):
+        A += [[x, y, 1, 0, 0, 0, -u*x, -u*y], [0, 0, 0, x, y, 1, -v*x, -v*y]]
+    return np.linalg.solve(np.array(A, float), np.array(src, float).reshape(8)).tolist()
+
+
+def plate(im, seed):
+    """Our navy logo on the blank white plate around `seed` (px), and «TR» on the plate's blue strip."""
+    from scipy import ndimage
+    a = np.asarray(im.convert('L')).astype(int); x, y = seed
+    win = a[y-120:y+120, x-220:x+220] > 150
+    lab, _ = ndimage.label(win); vals, cnt = np.unique(lab[lab > 0], return_counts=True)
+    ys, xs = np.where(lab == vals[cnt.argmax()]); xs = xs + x - 220; ys = ys + y - 120
+    sm, df = xs + ys, xs - ys
+    quad = [(xs[sm.argmin()], ys[sm.argmin()]), (xs[df.argmax()], ys[df.argmax()]), (xs[sm.argmax()], ys[sm.argmax()]), (xs[df.argmin()], ys[df.argmin()])]
+    tone = a[ys, xs].mean()/255
+    pw, ph = 1000, 280; flat = Image.new('RGBA', (pw, ph), (0, 0, 0, 0))
+    lg = Image.open(nc.LOGO_NAVY).convert('RGBA'); lh = round(ph*0.64); lw = round(lh*lg.width/lg.height)
+    if lw > pw*0.80: lw = round(pw*0.80); lh = round(lw*lg.height/lg.width)
+    lg = lg.resize((lw, lh), Image.LANCZOS); r, g, b, al = lg.split()
+    lg = Image.merge('RGBA', tuple(c.point(lambda v: int(v*tone)) for c in (r, g, b)) + (al,))
+    flat.alpha_composite(lg, ((pw - lw)//2, (ph - lh)//2))
+    out = im.convert('RGBA')
+    out.alpha_composite(flat.transform(im.size, Image.PERSPECTIVE, perspective_coeffs(quad, [(0, 0), (pw, 0), (pw, ph), (0, ph)]), Image.BICUBIC).filter(ImageFilter.GaussianBlur(0.6)))
+    # «TR» in the blue strip just left of the white field (same height, about a ninth of its width)
+    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = quad
+    bw = (x1 - x0)*0.115; sw, sh = 200, 280
+    strip = Image.new('RGBA', (sw, sh), (0, 0, 0, 0)); sd = ImageDraw.Draw(strip)
+    sd.text((sw/2, sh*0.66), 'TR', font=nc.F(OX, 30).real.font_variant(size=96), fill=(235, 238, 245, 235), anchor='ms')
+    q2 = [(x0 - bw, y0), (x0 - 2, y0), (x3 - 2, y3), (x3 - bw, y3)]
+    out.alpha_composite(strip.transform(im.size, Image.PERSPECTIVE, perspective_coeffs(q2, [(0, 0), (sw, 0), (sw, sh), (0, sh)]), Image.BICUBIC).filter(ImageFilter.GaussianBlur(0.6)))
+    print('plate quad', quad)
+    return out.convert('RGB')
+
+
+def shifted(name, shift):
+    """The photo moved down by `shift` units; the strip it frees at the top continues the photo's own top rows."""
+    im = Image.open(os.path.join(HERE, name)).convert('RGB').resize((W*K, H*K), Image.LANCZOS)
+    cv = Image.new('RGB', (W*K, H*K)); cv.paste(im, (0, round(shift*K)))
+    top = im.crop((0, 0, W*K, 40*K)).resize((W*K, round(shift*K) + 8*K)).filter(ImageFilter.GaussianBlur(14*K))
+    cv.paste(top, (0, 0))
+    fade = Image.new('L', (1, 60*K)); fade.putdata([int(255*(1 - i/(60*K))) for i in range(60*K)])
+    cv.paste(top.crop((0, top.height - 2, W*K, top.height)).resize((W*K, 60*K)), (0, round(shift*K)), fade.resize((W*K, 60*K)))
+    return cv.convert('RGBA')
+
+
 # ---------------------------------------------------------------------------------------------------------------
 def cover():
-    cv = nc.bg('tyre-1-cover.jpg')
-    shade(cv, [(lambda y: (1 - y/700)**1.2*0.96, DEEP), (lambda y: ((y - 1120)/150)*0.9, DEEP)])
+    cv = shifted('tyre-1-cover-istanbul.jpg', 330)
+    shade(cv, [(lambda y: (1 - y/620)**1.2*0.90, DEEP), (lambda y: ((y - 1110)/150)*0.92, DEEP)])
     d = D(cv); nc.chrome(cv, d, 1, TOTAL); d = D(cv)
-    y = 330
-    for t, col, size in (('ماذا تعني الأرقام', Wh, 76), ('على إطار سيارتك؟', O, 92)):
-        f = F(AR_BLACK, size); u, dn, _ = ink(t, f); b = y + u; ar(d, (W/2, b), t, f, col, 'ms'); y = b + dn + 26
+    lines = [('ماذا تعني الأرقام', Wh, 74), ('على إطار سيارتك؟', O, 92)]
+    y = 300; draws = []
+    for t, col, size in lines:
+        f = F(AR_BLACK, size); u, dn, _ = ink(t, f); b = y + u; draws.append(((W/2, b), t, f, 'ms', col)); y = b + dn + 26
     y -= 26
-    # the code on a dark glass plate
-    pw, ph = 640, 120; p0 = y + 44
-    glass(cv, (W/2 - pw/2, p0, W/2 + pw/2, p0 + ph), radius=60, fill=DEEP + (200,), outline=O + (200,))
-    pos, up = code_strip(cv, W/2, p0 + ph/2 + 26, 62)
-    print('cover: title 330 -', round(y), '| plate', round(p0), '-', round(p0 + ph))
+    halo(cv, [(xy, t, f, an) for xy, t, f, an, _ in draws]); d = D(cv)
+    for xy, t, f, an, col in draws: ar(d, xy, t, f, col, an)
+    # the code on a dark glass plate, low on the cobblestones
+    pw, ph = 620, 116; p0 = 1110
+    glass(cv, (W/2 - pw/2, p0, W/2 + pw/2, p0 + ph), radius=58, fill=DEEP + (225,), outline=O + (220,))
+    code_strip(cv, W/2, p0 + ph/2 + 25, 60)
+    print('cover: title 300 -', round(y), '| plate', p0, '-', p0 + ph, '| Galata spire ~', 190 + 330)
     return cv
 
 
@@ -151,62 +213,56 @@ def code_map():
 
 
 def size_slide():
-    cv = nc.bg('tyre-1-cover.jpg')
-    cv = cv.filter(ImageFilter.GaussianBlur(14*K))
-    shade(cv, [(lambda y: np.full_like(y, 0.72), DEEP)])
+    """A real wheel (Canva studio photo) with its dimensions marked on it and explained in callouts."""
+    S_, ox, oy = 0.80, -19, 300                              # photo scale and origin; wheel spans ~80-733 x, 400-1180 y
+    src = Image.open(os.path.join(HERE, 'tyre-3-studio.jpg')).convert('RGB')
+    base = src.resize((W*K, H*K), Image.LANCZOS).filter(ImageFilter.GaussianBlur(40*K))
+    cv = Image.blend(base, Image.new('RGB', base.size, DEEP), 0.55).convert('RGBA')
+    ph_ = src.resize((round(W*K*S_), round(H*K*S_)), Image.LANCZOS).convert('RGBA')
+    m = np.ones((ph_.height, ph_.width), np.float32); f_ = 60*K
+    yy, xx = np.mgrid[0:ph_.height, 0:ph_.width].astype(np.float32)
+    m = np.minimum.reduce([xx/f_ + 1, (ph_.width - 1 - xx)/f_, yy/f_]).clip(0, 1)
+    ph_.putalpha(Image.fromarray((m*255).astype(np.uint8))); cv.alpha_composite(ph_, (round(ox*K), round(oy*K)))
+    shade(cv, [(lambda y: (1 - y/420)**1.3*0.92, DEEP), (lambda y: ((y - 1150)/110)*0.9, DEEP)])
     d = D(cv); nc.chrome(cv, d, 3, TOTAL); d = D(cv)
     k_end = kicker(d, 'المقاس')
-    _, _ = code_strip(cv, 0, 0, 1) if False else (None, None)
-    pos, up = code_strip(cv, W/2, k_end + 34 + 70, 70, lit=('w', 'h', 'r', 'd'))
-    strip_end = k_end + 34 + 70 + 14
-    d = D(cv)
-    # side view (right) and tread view (left), real proportions: rim 508 mm, sidewall 140 mm, width 255 mm
-    Ro = 235; Ri = Ro*254/394; cx, cy = 690, strip_end + 100 + Ro
-    lay, ld = layer()
-    ld.ellipse((cx - Ro, cy - Ro, cx + Ro, cy + Ro), fill=(20, 24, 30, 255), outline=(70, 80, 94, 255), width=3)
-    ld.ellipse((cx - Ri, cy - Ri, cx + Ri, cy + Ri), fill=(52, 62, 76, 255), outline=(150, 162, 178, 255), width=3)
-    for a in range(0, 360, 72):                                  # five spokes
-        t = math.radians(a - 90)
-        ld.line([(cx + math.cos(t)*Ri*0.18, cy + math.sin(t)*Ri*0.18), (cx + math.cos(t)*Ri*0.92, cy + math.sin(t)*Ri*0.92)], fill=(120, 132, 148, 255), width=14)
-    ld.ellipse((cx - Ri*0.20, cy - Ri*0.20, cx + Ri*0.20, cy + Ri*0.20), fill=(90, 102, 118, 255))
-    cv.alpha_composite(lay); d = D(cv)
-    # rim diameter arrow (horizontal through the hub)
-    def arrow(p, q, col=O, w=4):
-        d.line([p, q], fill=col + (255,), width=w)
+    code_strip(cv, W/2, k_end + 34 + 64, 64, lit=('w', 'h', 'r', 'd')); d = D(cv)
+    P = lambda x, y: (ox + S_*x, oy + S_*y)                  # photo units (1080-wide frame) -> slide units
+
+    def arrow(p, q, w=4):
+        d.line([p, q], fill=O + (255,), width=w)
         for a_, b_ in ((p, q), (q, p)):
-            ang = math.atan2(b_[1] - a_[1], b_[0] - a_[0]); L = 14
-            d.polygon([a_, (a_[0] + L*math.cos(ang + 0.45), a_[1] + L*math.sin(ang + 0.45)), (a_[0] + L*math.cos(ang - 0.45), a_[1] + L*math.sin(ang - 0.45))], fill=col + (255,))
-    ay = cy + Ri*0.62
-    arrow((cx - Ri*0.78, ay), (cx + Ri*0.78, ay))
-    f = F(OX, 34); u, dn, w = ink('20"', f, False)
-    d.rounded_rectangle((cx - w/2 - 14, ay - u/2 - 14, cx + w/2 + 14, ay + u/2 + 14), radius=10, fill=DEEP + (255,), outline=O + (255,), width=2)
-    lt(d, (cx - w/2, ay + u/2), '20"', f, O)
-    # sidewall height arrow (vertical at the top, between rim and tread)
-    arrow((cx, cy - Ro + 6), (cx, cy - Ri - 4))
-    lt(d, (cx + 18, cy - (Ro + Ri)/2 + 12), '55%', F(OX, 34), O)
-    # tread view (left): width 255 mm
-    tw_ = Ro*255/394; tx = 300; t0, t1 = cy - Ro, cy + Ro
-    lay, ld = layer()
-    ld.rounded_rectangle((tx - tw_/2, t0, tx + tw_/2, t1), radius=40, fill=(20, 24, 30, 255), outline=(70, 80, 94, 255), width=3)
-    for gx in (-0.28, 0, 0.28):                                  # tread grooves
-        ld.line([(tx + gx*tw_, t0 + 20), (tx + gx*tw_, t1 - 20)], fill=(48, 56, 68, 255), width=6)
-    cv.alpha_composite(lay); d = D(cv)
-    arrow((tx - tw_/2, t0 - 26), (tx + tw_/2, t0 - 26))
-    lt(d, (tx - ink('255', F(OX, 34), False)[2]/2, t0 - 44), '255', F(OX, 34), O)
-    diag_end = cy + Ro
-    print('size: strip ends', round(strip_end), '| diagram', round(t0 - 44 - 30), '-', round(diag_end))
-    # three explanations
-    rows = [('255', 'عرض الإطار 255 مليمتراً'), ('55', 'ارتفاع جانبه 55% من عرضه، أي نحو 140 مم'), ('R20', 'إطار شعاعي يُركّب على جنط قطره 20 إنشاً')]
-    y = diag_end + 40; rh = 70
-    for code, txt in rows:
-        glass(cv, (M, y, R_, y + rh), radius=16); d = D(cv)
-        fc = F(OX, 34); u, dn, w = ink(code, fc, False)
-        d.rounded_rectangle((R_ - 16 - w - 28, y + 10, R_ - 16, y + rh - 10), radius=10, fill=O + (255,))
-        lt(d, (R_ - 16 - 14 - w, y + rh/2 + (u - dn)/2), code, fc, N)
-        ft = F(AR_BOLD, 28); u2, d2, _ = ink(txt, ft)
-        ar(d, (R_ - 16 - w - 28 - 20, y + rh/2 + (u2 - d2)/2), txt, ft, Wh)
-        y += rh + 14
-    print('size: rows end', round(y - 14))
+            ang = math.atan2(b_[1] - a_[1], b_[0] - a_[0]); L = 15
+            d.polygon([a_, (a_[0] + L*math.cos(ang + 0.45), a_[1] + L*math.sin(ang + 0.45)), (a_[0] + L*math.cos(ang - 0.45), a_[1] + L*math.sin(ang - 0.45))], fill=O + (255,))
+
+    def dot(p): d.ellipse((p[0] - 7, p[1] - 7, p[0] + 7, p[1] + 7), fill=O + (255,))
+
+    def callout(y0, code, line1, line2, target):
+        x0, x1 = 772, R_; f1 = F(OX, 46); u, dn, w = ink(code, f1, False)
+        f2 = F(AR_BOLD, 25); u2, d2, w2 = ink(line1, f2); u3, d3, w3 = ink(line2, f2)
+        assert max(w, w2, w3) <= x1 - x0 - 44, (code, w2, w3)
+        h = 22 + u + dn + 18 + u2 + d2 + 12 + u3 + d3 + 22
+        glass(cv, (x0, y0, x1, y0 + h), radius=18, fill=DEEP + (225,), outline=O + (170,))
+        dd = D(cv); b = y0 + 22 + u; lt(dd, (x1 - 22 - w, b), code, f1, O)
+        b2 = b + dn + 18 + u2; ar(dd, (x1 - 22, b2), line1, f2, Wh); b3 = b2 + d2 + 12 + u3; ar(dd, (x1 - 22, b3), line2, f2, SOFT)
+        dd.line([(x0, y0 + 22 + u/2 + 6), (target[0] + 10, target[1])], fill=O + (200,), width=2)
+        return y0 + h
+
+    # sidewall height: from the rim's top edge up to the tread, at the hub's x
+    s_top, s_bot = P(410, 152), P(410, 236)
+    arrow(s_top, s_bot); d.line([(s_top[0] - 18, s_top[1]), (s_top[0] + 18, s_top[1])], fill=O + (255,), width=3)
+    # rim diameter: across the rim through the hub
+    r_l, r_r = P(182, 624), P(620, 624)
+    arrow(r_l, r_r)
+    # tread width: across the tread band on the right
+    t_l, t_r = (500, 650), (728, 650)                           # across the tread band, above the rim arrow
+    arrow(t_l, t_r)
+    d = D(cv)
+    y = 400
+    y = callout(y, '55%', 'ارتفاع الجانب', 'من عرض الإطار', ((s_top[0] + s_bot[0])/2, (s_top[1] + s_bot[1])/2)) + 30
+    y = callout(y, '255', 'عرض الإطار', 'بالمليمتر', (t_r[0], t_r[1])) + 30
+    y = callout(y, 'R20', 'جنط 20 إنشاً', 'إطار شعاعي', (r_r[0] - 40, r_r[1]))
+    print('size: callouts 400 -', round(y), '| arrows', [tuple(round(v) for v in p) for p in (s_top, s_bot, r_l, r_r, t_l, t_r)])
     return cv
 
 
@@ -248,8 +304,10 @@ def load_slide():
 
 
 def speed_slide():
-    cv = nc.bg('tyre-4-speed.jpg')
-    shade(cv, [(lambda y: (1 - y/700)**1.1*0.9, DEEP), (lambda y: ((y - 1000)/180)*0.94, DEEP)])
+    im = plate(Image.open(os.path.join(HERE, 'tyre-4-chery.jpg')).convert('RGB'), (830, 1798))
+    im.save('/tmp/sm/chery-plate.jpg')
+    cv = im.resize((W*K, H*K), Image.LANCZOS).convert('RGBA')
+    shade(cv, [(lambda y: (1 - y/660)**1.1*0.88, DEEP), (lambda y: ((y - 1040)/120)*0.94, DEEP)])
     d = D(cv); nc.chrome(cv, d, 5, TOTAL); d = D(cv)
     k_end = kicker(d, 'رمز السرعة')
     pos, up = code_strip(cv, W/2, k_end + 34 + 46, 46, lit=('speed',)); y = k_end + 34 + 46 + 12
@@ -257,15 +315,17 @@ def speed_slide():
     fb = F(OX, 190); u, dn, w = ink('V', fb, False); b = y + 40 + u
     fn = F(OX, 64); t = '= 240 km/h'; u3, d3, w3 = ink(t, fn, False)
     gap = 30; tot = w + gap + w3; x0 = W/2 - tot/2
+    g, gd = layer(); gd.rounded_rectangle((x0 - 60, b - u - 30, x0 + tot + 40, b + 30), radius=60, fill=DEEP + (200,)); cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(26*K)))
     g, gd = layer(); gd.ellipse((x0 - 40, b - u - 10, x0 + w + 40, b + 20), fill=O + (90,)); cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(30*K))); d = D(cv)
     lt(d, (x0, b), 'V', fb, O); lt(d, (x0 + w + gap, b - 10), t, fn, Wh)
     y = b + dn
-    t = 'أقصى سرعة يتحمّلها الإطار بأمان'; f = F(AR_BOLD, 34); u, dn, _ = ink(t, f); b = y + 24 + u; ar(d, (W/2, b), t, f, SOFT, 'ms'); y = b + dn
+    t = 'أقصى سرعة يتحمّلها الإطار بأمان'; f = F(AR_BOLD, 34); u, dn, _ = ink(t, f); b = y + 24 + u
+    halo(cv, [((W/2, b), t, f, 'ms')], r=14); d = D(cv); ar(d, (W/2, b), t, f, Wh, 'ms'); y = b + dn
     print('speed: big letter to', round(y))
     # the common symbols, V lit
     syms = [('Q', 160), ('R', 170), ('S', 180), ('T', 190), ('H', 210), ('V', 240), ('W', 270), ('Y', 300)]
     cw_ = 108; gap = 12; tot = 8*cw_ + 7*gap
-    x = W/2 - tot/2; t0 = 1010; th = 110
+    x = W/2 - tot/2; t0 = 1066; th = 104
     for s, v in syms:
         on = s == 'V'
         glass(cv, (x, t0, x + cw_, t0 + th), radius=14, fill=(O if on else CARD) + (255 if on else 225,), outline=(255, 255, 255, 40))
@@ -274,7 +334,7 @@ def speed_slide():
         f2 = F(OX6, 22); u2, d2, w2 = ink(str(v), f2, False); b2 = b + dn + 14 + u2
         lt(d, (x + cw_/2 - w2/2, b2), str(v), f2, N if on else SOFT)
         x += cw_ + gap
-    t = 'السرعة القصوى للإطار، وليست سرعة يُنصح بالقيادة بها'; f = F(AR_BOLD, 26); u, dn, w = ink(t, f); b = t0 + th + 30 + u
+    t = 'السرعة القصوى للإطار، وليست سرعة يُنصح بالقيادة بها'; f = F(AR_BOLD, 26); u, dn, w = ink(t, f); b = t0 + th + 26 + u
     ar(d, (W/2, b), t, f, SOFT, 'ms')
     print('speed: symbols', t0, '-', t0 + th, '| note ends', round(b + dn))
     return cv
@@ -319,14 +379,18 @@ def date_slide():
 
 def ask():
     cv = nc.bg('tyre-6-shop.jpg')
-    shade(cv, [(lambda y: (1 - y/900)*0.95, DEEP), (lambda y: ((y - 1120)/160)*0.9, DEEP)])
+    shade(cv, [(lambda y: (1 - y/960)*0.95, DEEP), (lambda y: ((y - 1120)/160)*0.9, DEEP)])
     d = D(cv); nc.chrome(cv, d, 7, TOTAL); d = D(cv)
     fe = F(AR_BOLD, 30); u, dn, w = ink('شاركنا رأيك', fe); eh = 58; y = 330
+    lines = [('هل سبق أن تحققت', F(AR_BLACK, 74), Wh), ('من تاريخ صنع', F(AR_BLACK, 74), Wh), ('إطارات سيارتك؟', F(AR_BLACK, 96), O)]
+    yy = y + eh + 40 - 26; draws = []
+    for t, f, col in lines:
+        u2, d2, _ = ink(t, f); b = yy + 26 + u2; draws.append(((W/2, b), t, f, 'ms', col)); yy = b + d2
+    halo(cv, [(xy, t, f, an) for xy, t, f, an, _ in draws]); d = D(cv)
     d.rectangle((W/2 - w/2 - 26, y, W/2 + w/2 + 26, y + eh), fill=O + (255,))
     ar(d, (W/2, y + eh/2 + (u - dn)/2), 'شاركنا رأيك', fe, N, 'ms')
-    end = stack(d, [('هل سبق أن تحققت', F(AR_BLACK, 74), Wh), ('من تاريخ صنع', F(AR_BLACK, 74), Wh),
-                    ('إطارات سيارتك؟', F(AR_BLACK, 96), O)], y + eh + 40, W/2, 'ms', gap=26)
-    print('ask: chip', y, '| title to', round(end))
+    for xy, t, f, an, col in draws: ar(d, xy, t, f, col, an)
+    print('ask: chip', y, '| title to', round(yy))
     return cv
 
 
