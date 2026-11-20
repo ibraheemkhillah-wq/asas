@@ -1,8 +1,8 @@
 """«اعتنِ بسيارتك»: what the tyre wear pattern says about your car — six DARK slides, 2160x2700.
 
 usage: python3 tyre_wear.py <brand-kit dir> <out dir>
-Photos: Canva AI. wear-cover.jpg; the tread photo wear-tread.png with its four wear patterns made by
-wear_variants.py (centre / edges / one side / cupping); the parts are Canva cutouts (wear-gauge/arm/shock.png).
+Photos: Canva AI. wear-cover.jpg; the four worn tyres are Canva edits of one tread photo (wear-tread.png), each
+showing a real wear pattern (wear-centre/edges/side/cupping.png); the parts are Canva cutouts (wear-gauge/arm/shock.png).
 Causes (standard tyre-wear guidance): centre = over-inflation; both edges = under-inflation; one side =
 wheel alignment (camber/toe) or worn suspension arms; cupping = worn shock absorbers or unbalanced wheels.
 Reuses the dark helpers of ../news/idea_tyre_code.py. Layout in 1080 units; lines placed from measured ink.
@@ -25,7 +25,7 @@ TYPES = [('centre', 'تآكل في الوسط', [(0.33, 0.67)], 'wear-gauge.png'
           'ضغط الهواء مرتفع', 'اضبط الضغط وفق الرقم المدوّن على إطار باب السائق'),
          ('edges', 'تآكل في الطرفين', [(0.04, 0.24), (0.76, 0.96)], 'wear-gauge.png',
           'ضغط الهواء منخفض', 'افحص الضغط مرة كل شهر والإطارات باردة'),
-         ('side', 'تآكل في جهة واحدة', [(0.04, 0.42)], 'wear-arm.png',
+         ('side', 'تآكل في جهة واحدة', [(0.04, 0.45)], 'wear-arm.png',
           'خلل في زوايا العجلات (الميزان) أو تلف أذرعة التعليق', 'افحص ضبط زوايا العجلات وحالة الأذرعة'),
          ('cupping', 'تآكل متقطّع غير منتظم', [(0.10, 0.90)], 'wear-shock.png',
           'ضعف المساعدات (الممتصات) أو عدم توازن العجلات', 'افحص المساعدات واطلب موازنة العجلات')]
