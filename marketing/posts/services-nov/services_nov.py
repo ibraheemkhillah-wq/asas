@@ -367,10 +367,58 @@ def seat_b():
     print('seat-b: title 300 -', round(end), '| steps', y0, '-', y0 + ch, '| chip to', round(c))
     return cv
 
+def okm_c():
+    """Open km, idea «the receipt»: a real flat-lay receipt (Canva) printed with our bill; the excess-km line reads 0,
+    circled by hand in orange."""
+    sh = 100
+    cv = photo('okm-receipt.jpg', shift=sh)
+    floor(cv, False, 1170, 90)
+    header(cv, False)
+    end = headline(cv, [('سطر في فاتورتك..', N, 70), ('لن تدفع فيه شيئاً', O, 70)], 320, False)
+    # the paper: x 349-731, flat from y 563 (photo units) -> + shift
+    px0, px1 = 349, 731; top = 563 + sh + 26; cx = (px0 + px1)/2; L, R = px0 + 26, px1 - 26
+    INKC = (40, 48, 60); lay, d = layer()
+    TJ = os.path.join(sys.argv[1], 'fonts', 'Tajawal-Bold.ttf'); TJR = os.path.join(sys.argv[1], 'fonts', 'Tajawal-Regular.ttf')
+    lg = Image.open(LOGO_NAVY).convert('RGBA'); lw = 150; lh = round(lw*lg.height/lg.width)
+    lay.alpha_composite(lg.resize((lw*K, lh*K), Image.LANCZOS), (round((cx - lw/2)*K), round(top*K)))
+    y = top + lh + 26
+    f = F(TJ, 24); u, dn, w = ink('فاتورة الإيجار', f); ar(d, (cx, y + u), 'فاتورة الإيجار', f, INKC, 'ms'); y += u + dn + 22
+    def dash(y):
+        x = L
+        while x < R: d.line([(x, y), (min(x + 8, R), y)], fill=INKC + (200,), width=2); x += 14
+    dash(y); y += 26
+    fr = F(TJR, 23); fb = F(TJ, 23)
+    rows = [('إيجار السيارة', '7 أيام'), ('المسافة المقطوعة', '1,240 كم'), ('حد الكيلومترات', 'مفتوح')]
+    for a, b in rows:
+        u, dn, _ = ink(a, fr); ar(d, (R, y + u), a, fr, INKC, 'rs')
+        ub, dnb, wb = ink(b, fb); ar(d, (L, y + u), b, fb, INKC, 'ls')
+        y += u + max(dn, dnb) + 24
+    dash(y); y += 30
+    fk = F(TJ, 25); a = 'رسوم الكيلومترات الزائدة'; u, dn, wa = ink(a, fk); ar(d, (R, y + u), a, fk, INKC, 'rs'); y += u + dn + 26
+    f0 = F(OX6, 44); u0, d0, w0 = ink('0', f0, False); fl = F(TJ, 24); ul, dl, wl = ink('ليرة', fl)
+    base = y + u0; vx = L + 18                                  # reads «0 ليرة» right-to-left: the 0 first, on the right
+    ar(d, (vx, base), 'ليرة', fl, INKC, 'ls'); lt(d, (vx + wl + 10, base), '0', f0, INKC)
+    zc = (vx + (wl + 10 + w0)/2, base - u0/2); y = base + max(d0, dl) + 28
+    dash(y); thanks = y
+    lay = lay.filter(ImageFilter.GaussianBlur(0.35*K)); r_, g_, b_, a_ = lay.split(); lay.putalpha(a_.point(lambda v: int(v*0.9)))
+    cv.alpha_composite(lay)
+    # hand-drawn orange marker loop round the 0
+    g, gd = layer(); rx, ry = (w0 + 10 + wl)/2 + 20, u0/2 + 16
+    rng = np.random.default_rng(4); pts = []
+    for i in range(0, 430, 6):
+        t_ = math.radians(i - 20); k_ = 1 + 0.05*math.sin(i/37) + rng.normal(0, 0.008) + (0.10 if i > 360 else 0)*((i - 360)/70)
+        pts.append((zc[0] + rx*k_*math.cos(t_), zc[1] + ry*k_*math.sin(t_) - (i/430)*4))
+    gd.line(pts, fill=O + (235,), width=5, joint='curve')
+    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(0.4*K)))
+    c = terms(cv, 1182, False)
+    footer(cv, False)
+    print('okm-c: title 320 -', round(end), '| receipt', top, '-', round(thanks), '| chip 1182 -', round(c))
+    return cv
+
 
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
-    for name, fn in (('air-a', air_a), ('air-b', air_b), ('okm-a', okm_a), ('okm-b', okm_b),
+    for name, fn in (('air-a', air_a), ('air-b', air_b), ('okm-a', okm_a), ('okm-b', okm_b), ('okm-c', okm_c),
                      ('kasko-a', kasko_a), ('kasko-b', kasko_b), ('seat-a', seat_a), ('seat-b', seat_b)):
         if len(sys.argv) > 3 and name not in sys.argv[3].split(','): continue
         cv = fn(); p = os.path.join(out, f'svc-{name}.png'); cv.convert('RGB').save(p, optimize=True); print(p, cv.size)
