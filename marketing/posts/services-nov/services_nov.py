@@ -280,12 +280,15 @@ def fob_print(cv):
     """CALL & RENT printed on the key fob's top panel: the white logo warped onto the panel's tilted face
     (units, measured on the photo after the 110 shift), toned down and softened so it reads as print, not a sticker."""
     lg = Image.open(LOGO_WHITE).convert('RGBA'); pw, ph = lg.size
-    quad = [(335, 912), (548, 830), (571, 891), (358, 973)]
-    q = [(x*K, y*K) for x, y in quad]
+    cx, cy, Lw = 418, 915, 240; Lh = Lw*ph/pw
+    a_ = math.radians(-35); dx, dy = math.cos(a_), math.sin(a_)          # along the fob (lower-left to upper-right)
+    nx, ny = 0.35, 0.94; nn = math.hypot(nx, ny); nx, ny = nx/nn, ny/nn    # letter uprights, foreshortened toward vertical
+    def P(u, v): return ((cx + dx*u + nx*v)*K, (cy + dy*u + ny*v)*K)
+    q = [P(-Lw/2, -Lh/2), P(Lw/2, -Lh/2), P(Lw/2, Lh/2), P(-Lw/2, Lh/2)]
     w = lg.transform(cv.size, Image.PERSPECTIVE, tc.perspective_coeffs(q, [(0, 0), (pw, 0), (pw, ph), (0, ph)]), Image.BICUBIC)
-    r, g, b, a = w.split(); a = a.point(lambda v: int(v*0.78))
-    w = Image.merge('RGBA', (r.point(lambda v: int(v*0.86)), g.point(lambda v: int(v*0.88)), b.point(lambda v: int(v*0.92)), a))
-    cv.alpha_composite(w.filter(ImageFilter.GaussianBlur(0.7*K)))
+    r, g, b, a = w.split(); a = a.point(lambda v: int(v*0.95))
+    w = Image.merge('RGBA', (r.point(lambda v: int(v*0.96)), g.point(lambda v: int(v*0.96)), b.point(lambda v: int(v*0.98)), a))
+    cv.alpha_composite(w.filter(ImageFilter.GaussianBlur(0.4*K)))
 
 
 def shield_check(cv, cx, cy, s=1.0):
