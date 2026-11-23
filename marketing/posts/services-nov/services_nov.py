@@ -379,37 +379,52 @@ def okm_c():
     px0, px1 = 349, 731; top = 563 + sh + 26; cx = (px0 + px1)/2; L, R = px0 + 26, px1 - 26
     INKC = (40, 48, 60); lay, d = layer()
     TJ = os.path.join(sys.argv[1], 'fonts', 'Tajawal-Bold.ttf'); TJR = os.path.join(sys.argv[1], 'fonts', 'Tajawal-Regular.ttf')
-    lg = Image.open(LOGO_NAVY).convert('RGBA'); lw = 150; lh = round(lw*lg.height/lg.width)
+    lg = Image.open(LOGO_NAVY).convert('RGBA'); lw = 128; lh = round(lw*lg.height/lg.width)
     lay.alpha_composite(lg.resize((lw*K, lh*K), Image.LANCZOS), (round((cx - lw/2)*K), round(top*K)))
-    y = top + lh + 26
-    f = F(TJ, 24); u, dn, w = ink('فاتورة الإيجار', f); ar(d, (cx, y + u), 'فاتورة الإيجار', f, INKC, 'ms'); y += u + dn + 22
+    y = top + lh + 22
+    f = F(TJ, 22); u, dn, w = ink('فاتورة الإيجار', f); ar(d, (cx, y + u), 'فاتورة الإيجار', f, INKC, 'ms'); y += u + dn + 18
     def dash(y):
         x = L
         while x < R: d.line([(x, y), (min(x + 8, R), y)], fill=INKC + (200,), width=2); x += 14
-    dash(y); y += 26
-    fr = F(TJR, 23); fb = F(TJ, 23)
-    rows = [('إيجار السيارة', '7 أيام'), ('المسافة المقطوعة', '1,240 كم'), ('حد الكيلومترات', 'مفتوح')]
-    for a, b in rows:
-        u, dn, _ = ink(a, fr); ar(d, (R, y + u), a, fr, INKC, 'rs')
-        ub, dnb, wb = ink(b, fb); ar(d, (L, y + u), b, fb, INKC, 'ls')
-        y += u + max(dn, dnb) + 24
-    dash(y); y += 30
-    fk = F(TJ, 25); a = 'رسوم الكيلومترات الزائدة'; u, dn, wa = ink(a, fk); ar(d, (R, y + u), a, fk, INKC, 'rs'); y += u + dn + 26
-    f0 = F(OX6, 44); u0, d0, w0 = ink('0', f0, False); fl = F(TJ, 24); ul, dl, wl = ink('ليرة', fl)
-    base = y + u0; vx = L + 18                                  # reads «0 ليرة» right-to-left: the 0 first, on the right
-    ar(d, (vx, base), 'ليرة', fl, INKC, 'ls'); lt(d, (vx + wl + 10, base), '0', f0, INKC)
-    zc = (vx + (wl + 10 + w0)/2, base - u0/2); y = base + max(d0, dl) + 28
-    dash(y); thanks = y
-    lay = lay.filter(ImageFilter.GaussianBlur(0.35*K)); r_, g_, b_, a_ = lay.split(); lay.putalpha(a_.point(lambda v: int(v*0.9)))
+    dash(y); y += 22
+    fr = F(TJR, 21); fb = F(TJ, 21); fs = F(TJR, 17)
+    rows = [('إيجار Renault Clio 2024', '10,200 TL', '7 أيام'), ('طرق مدفوعة HGS', '3,100 TL', None),
+            ('المسافة المقطوعة', '1,846 كم', None)]
+    for a_, b_, sub in rows:
+        u, dn, wa_ = ink(a_, fr); ub, dnb, wb = ink(b_, fb); assert wa_ + wb + 16 <= R - L, a_
+        ar(d, (R, y + u), a_, fr, INKC, 'rs'); (lt(d, (L, y + u), b_, fb, INKC) if 'TL' in b_ else ar(d, (L, y + u), b_, fb, INKC, 'ls')); y += u + max(dn, dnb)
+        if sub:
+            us, ds, _ = ink(sub, fs); y += 8; ar(d, (R, y + us), sub, fs, (110, 118, 130), 'rs'); y += us + ds
+        y += 18
+    dash(y); y += 24
+    fk = F(TJ, 22); a_ = 'رسوم الكيلومترات الزائدة'; u, dn, wa_ = ink(a_, fk); ar(d, (R, y + u), a_, fk, INKC, 'rs')
+    lt(d, (L, y + u), '0 TL', fk, INKC); y += u + dn + 20
+    lay = lay.filter(ImageFilter.GaussianBlur(0.35*K)); r_, g_, b2, a2 = lay.split(); lay.putalpha(a2.point(lambda v: int(v*0.9)))
     cv.alpha_composite(lay)
-    # hand-drawn orange marker loop round the 0
-    g, gd = layer(); rx, ry = (w0 + 10 + wl)/2 + 20, u0/2 + 16
-    rng = np.random.default_rng(4); pts = []
-    for i in range(0, 430, 6):
-        t_ = math.radians(i - 20); k_ = 1 + 0.05*math.sin(i/37) + rng.normal(0, 0.008) + (0.10 if i > 360 else 0)*((i - 360)/70)
-        pts.append((zc[0] + rx*k_*math.cos(t_), zc[1] + ry*k_*math.sin(t_) - (i/430)*4))
-    gd.line(pts, fill=O + (235,), width=5, joint='curve')
-    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(0.4*K)))
+    # red rubber stamp «عداد مفتوح» (double frame, worn ink), slightly turned, under the line
+    RED = (205, 32, 38); sw_, sh_ = 230, 78
+    st = Image.new('RGBA', (sw_*K, sh_*K), (0, 0, 0, 0)); sd = ImageDraw.Draw(st)
+    sd.rounded_rectangle((2*K, 2*K, (sw_ - 2)*K, (sh_ - 2)*K), radius=5*K, outline=RED + (255,), width=round(2.6*K))
+    sd.rounded_rectangle((9*K, 9*K, (sw_ - 9)*K, (sh_ - 9)*K), radius=4*K, outline=RED + (255,), width=round(4.2*K))
+    fst = F(AR_BLACK, 32); u, dn, w = ink('عداد مفتوح', fst)
+    sd.text((sw_/2*K, (sh_/2 + (u - dn)/2)*K), 'عداد مفتوح', font=fst.real, fill=RED + (255,), anchor='ms', direction='rtl', language='ar')
+    rng = np.random.default_rng(7); A = np.asarray(st).astype(np.float32)
+    noise = rng.random(A.shape[:2]); speck = Image.fromarray((noise > 0.993).astype(np.uint8)*255).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(1))
+    wear = np.clip(0.86 + 0.14*rng.random(A.shape[:2]), 0, 1)*(1 - np.asarray(speck)/255*0.9)
+    A[..., 3] *= wear; st = Image.fromarray(A.astype(np.uint8)).rotate(-6, resample=Image.BICUBIC, expand=True)
+    sx, sy = cx - 34, y + sh_/2 + 6
+    cv.alpha_composite(st.filter(ImageFilter.GaussianBlur(0.3*K)), (round(sx*K - st.width/2), round(sy*K - st.height/2)))
+    # blue ballpoint signature under the stamp, its tail sweeping right
+    g, gd = layer(); BLUE = (28, 52, 150)
+    def bez(p0, p1, p2, p3, n=40):
+        return [((1-t)**3*p0[0] + 3*(1-t)**2*t*p1[0] + 3*(1-t)*t*t*p2[0] + t**3*p3[0],
+                 (1-t)**3*p0[1] + 3*(1-t)**2*t*p1[1] + 3*(1-t)*t*t*p2[1] + t**3*p3[1]) for t in np.linspace(0, 1, n)]
+    ox, oy = cx + 6, sy + 70
+    fsig = F(os.path.join(sys.argv[1], 'fonts', 'MrsSaintDelafield-Regular.ttf'), 44)
+    gd.text((ox, oy), 'CallRent', font=fsig, fill=BLUE + (235,), anchor='ms', direction='ltr', language='en')
+    gd.line(bez((ox - 92, oy + 12), (ox - 20, oy + 2), (ox + 60, oy + 16), (ox + 108, oy - 2)), fill=BLUE + (210,), width=2, joint='curve')
+    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(0.35*K)))
+    thanks = oy + 22
     c = terms(cv, 1182, False)
     footer(cv, False)
     print('okm-c: title 320 -', round(end), '| receipt', top, '-', round(thanks), '| chip 1182 -', round(c))
