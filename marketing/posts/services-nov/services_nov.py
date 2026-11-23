@@ -438,10 +438,7 @@ def okm_c():
     def bez(p0, p1, p2, p3, n=40):
         return [((1-t)**3*p0[0] + 3*(1-t)**2*t*p1[0] + 3*(1-t)*t*t*p2[0] + t**3*p3[0],
                  (1-t)**3*p0[1] + 3*(1-t)**2*t*p1[1] + 3*(1-t)*t*t*p2[1] + t**3*p3[1]) for t in np.linspace(0, 1, n)]
-    ox, oy = cx + 62, sy + 47                                 # signed across the stamp's lower right corner
-    sg = signature(sys.argv[1], 'S. Aydin', 50*K, BLUE, seed=3); sg = sg.crop(sg.getbbox())
-    cv.alpha_composite(sg, (round(ox*K - sg.width/2), round(oy*K - sg.height/2)))
-    thanks = oy + sg.height/K/2
+    thanks = sy + sh_/2 + 8
     c = terms(cv, 1182, False, text='عداد مفتوح - وفق الشروط والأحكام')
     footer(cv, False)
     print('okm-c: title 320 -', round(end), '| receipt', top, '-', round(thanks), '| chip 1182 -', round(c))
