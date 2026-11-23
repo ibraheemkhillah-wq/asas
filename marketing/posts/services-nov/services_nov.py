@@ -276,16 +276,38 @@ def kasko_a():
     return cv
 
 
+def fob_print(cv):
+    """CALL & RENT printed on the key fob's top panel: the white logo warped onto the panel's tilted face
+    (units, measured on the photo after the 110 shift), toned down and softened so it reads as print, not a sticker."""
+    lg = Image.open(LOGO_WHITE).convert('RGBA'); pw, ph = lg.size
+    quad = [(335, 912), (548, 830), (571, 891), (358, 973)]
+    q = [(x*K, y*K) for x, y in quad]
+    w = lg.transform(cv.size, Image.PERSPECTIVE, tc.perspective_coeffs(q, [(0, 0), (pw, 0), (pw, ph), (0, ph)]), Image.BICUBIC)
+    r, g, b, a = w.split(); a = a.point(lambda v: int(v*0.78))
+    w = Image.merge('RGBA', (r.point(lambda v: int(v*0.86)), g.point(lambda v: int(v*0.88)), b.point(lambda v: int(v*0.92)), a))
+    cv.alpha_composite(w.filter(ImageFilter.GaussianBlur(0.7*K)))
+
+
+def shield_check(cv, cx, cy, s=1.0):
+    """A bold enamel check centred on the shield keychain's face (tilted with the shield)."""
+    ang = math.radians(-12)
+    pts = [(-40, 2), (-12, 30), (42, -28)]
+    P = [(cx + (x*math.cos(ang) - y*math.sin(ang))*s, cy + (x*math.sin(ang) + y*math.cos(ang))*s) for x, y in pts]
+    g, gd = layer(); gd.ellipse((cx - 70, cy - 70, cx + 70, cy + 70), fill=O + (70,)); cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(18*K)))
+    g, gd = layer(); gd.line([(x + 2, y + 4) for x, y in P], fill=(20, 12, 6, 150), width=18, joint='curve')
+    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(3*K)))
+    d = D(cv); d.line(P, fill=O + (255,), width=16, joint='curve')
+    for x, y in (P[0], P[2]): d.ellipse((x - 8, y - 8, x + 8, y + 8), fill=O + (255,))
+    d.line([(x - 1, y - 3) for x, y in P], fill=(255, 196, 140, 150), width=4, joint='curve')
+
+
 def kasko_b():
     cv = photo('kasko-b.jpg', shift=110)
     shade(cv, [(lambda y: (1 - y/560)**1.2*0.6, DEEP)]); floor(cv, True, 1150, 100)
     header(cv, True)
     end = headline(cv, [('مفتاح سيارتك..', Wh, 80), ('ومعه راحة بالك', O, 80)], 300, True)
     e2 = para(cv, 'أضِف التأمين الشامل إلى حجزك، وانطلق في إسطنبول مطمئناً', end + 30, 32, Wh, maxw=R_ - M - 120)
-    # a small check stamped on the shield keychain (photo shield ~ x 697-911, y 810-1046 before the shift)
-    sx, sy = 806, 940 + 110; d = D(cv)
-    g, gd = layer(); gd.ellipse((sx - 40, sy - 40, sx + 40, sy + 40), fill=O + (110,)); cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(10*K)))
-    d = D(cv); d.line([(sx - 20, sy + 2), (sx - 6, sy + 17), (sx + 22, sy - 16)], fill=O + (255,), width=8, joint='curve')
+    fob_print(cv); shield_check(cv, 809, 1031)
     c = terms(cv, 1180, True)
     footer(cv, True)
     print('kasko-b: title 300 -', round(end), '| para to', round(e2), '| chip 1180 -', round(c))
@@ -347,4 +369,5 @@ if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
     for name, fn in (('air-a', air_a), ('air-b', air_b), ('okm-a', okm_a), ('okm-b', okm_b),
                      ('kasko-a', kasko_a), ('kasko-b', kasko_b), ('seat-a', seat_a), ('seat-b', seat_b)):
+        if len(sys.argv) > 3 and name not in sys.argv[3].split(','): continue
         cv = fn(); p = os.path.join(out, f'svc-{name}.png'); cv.convert('RGB').save(p, optimize=True); print(p, cv.size)
