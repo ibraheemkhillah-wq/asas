@@ -13,7 +13,7 @@ import idea_tyre_code as tc
 import news_carousel as nc
 from news_carousel import W, H, M, R_, O, Wh, DEEP, LOGONAVY as N, SOFT, AR_BLACK, AR_BOLD, CT_FONT
 from brand import LOGO_WHITE, LOGO_NAVY, load_icons
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import numpy as np
 
 K = nc.K
@@ -95,12 +95,12 @@ def para(cv, t, top, size, col, x=R_, maxw=None, anchor='rs', gap=14, font=AR_BO
     return y - gap
 
 
-def terms(cv, y, dark, x=None):
+def terms(cv, y, dark, x=None, text=TERMS):
     """The orange «paid extra» chip, centred (or right-aligned at x). Returns its bottom."""
-    f = F(AR_BOLD, 25); u, dn, w = ink(TERMS, f); h = u + dn + 22; cw = w + 52
+    f = F(AR_BOLD, 25); u, dn, w = ink(text, f); h = u + dn + 22; cw = w + 52
     x1 = (W/2 + cw/2) if x is None else x
     d = D(cv); d.rounded_rectangle((x1 - cw, y, x1, y + h), radius=h/2, fill=O + (255,))
-    ar(d, (x1 - cw/2, y + 11 + u), TERMS, f, Wh if dark else N, 'ms')
+    ar(d, (x1 - cw/2, y + 11 + u), text, f, Wh if dark else N, 'ms')
     return y + h
 
 
@@ -367,6 +367,25 @@ def seat_b():
     print('seat-b: title 300 -', round(end), '| steps', y0, '-', y0 + ch, '| chip to', round(c))
     return cv
 
+def signature(kit, name, size, col, seed=3):
+    """A ballpoint signature: script letters written fast - slanted, wobbly, uneven pressure, a quick underline flick."""
+    from scipy.ndimage import gaussian_filter, map_coordinates
+    rng = np.random.default_rng(seed); f = ImageFont.truetype(os.path.join(kit, 'fonts', 'MrsSaintDelafield-Regular.ttf'), size)
+    Wd, Hd = int(size*5), int(size*2.2); m = Image.new('L', (Wd, Hd), 0); md = ImageDraw.Draw(m)
+    md.text((size*0.4, size*1.35), name, font=f, fill=255, anchor='ls')
+    bb = m.getbbox(); x1, yb = bb[2], size*1.35
+    fl = [(size*0.3 + t*(x1 - size*0.1), yb + size*0.30 - t*size*0.55 + size*0.10*math.sin(t*3.0)) for t in np.linspace(0, 1, 80)]
+    md.line(fl, fill=255, width=max(2, size//22), joint='curve')        # fast underline flick, rising to the right
+    A = np.asarray(m).astype(np.float32)/255
+    yy, xx = np.mgrid[0:Hd, 0:Wd].astype(np.float32)
+    dx = gaussian_filter(rng.normal(0, 1, (Hd, Wd)), size*0.35)*size*0.9; dy = gaussian_filter(rng.normal(0, 1, (Hd, Wd)), size*0.35)*size*0.9
+    A = map_coordinates(A, [yy + dy - (xx - Wd/2)*0.0, xx + dx + (yy - Hd/2)*0.22], order=1)   # wobble + forward slant
+    press = 0.55 + 0.45*np.clip(gaussian_filter(rng.random((Hd, Wd)), size*0.25)*9 - 3.7, 0, 1)  # pressure varies along the strokes
+    A = np.clip(A*1.25, 0, 1)*press
+    out = np.zeros((Hd, Wd, 4), np.uint8); out[..., :3] = col; out[..., 3] = (A*235).astype(np.uint8)
+    return Image.fromarray(out, 'RGBA').rotate(7, resample=Image.BICUBIC, expand=True).filter(ImageFilter.GaussianBlur(size*0.006))
+
+
 def okm_c():
     """Open km, idea «the receipt»: a real flat-lay receipt (Canva) printed with our bill; the excess-km line reads 0,
     circled by hand in orange."""
@@ -374,7 +393,7 @@ def okm_c():
     cv = photo('okm-receipt.jpg', shift=sh)
     floor(cv, False, 1170, 90)
     header(cv, False)
-    end = headline(cv, [('سطر في فاتورتك..', N, 70), ('لن تدفع فيه شيئاً', O, 70)], 320, False)
+    end = headline(cv, [('مسافة مفتوحة..', N, 74), ('والرسوم صفر', O, 74)], 320, False)
     # the paper: x 349-731, flat from y 563 (photo units) -> + shift
     px0, px1 = 349, 731; top = 563 + sh + 26; cx = (px0 + px1)/2; L, R = px0 + 26, px1 - 26
     INKC = (40, 48, 60); lay, d = layer()
@@ -402,30 +421,28 @@ def okm_c():
     lay = lay.filter(ImageFilter.GaussianBlur(0.35*K)); r_, g_, b2, a2 = lay.split(); lay.putalpha(a2.point(lambda v: int(v*0.9)))
     cv.alpha_composite(lay)
     # red rubber stamp «عداد مفتوح» (double frame, worn ink), slightly turned, under the line
-    RED = (205, 32, 38); sw_, sh_ = 230, 78
+    RED = (205, 32, 38); sw_, sh_ = 300, 100
     st = Image.new('RGBA', (sw_*K, sh_*K), (0, 0, 0, 0)); sd = ImageDraw.Draw(st)
-    sd.rounded_rectangle((2*K, 2*K, (sw_ - 2)*K, (sh_ - 2)*K), radius=5*K, outline=RED + (255,), width=round(2.6*K))
-    sd.rounded_rectangle((9*K, 9*K, (sw_ - 9)*K, (sh_ - 9)*K), radius=4*K, outline=RED + (255,), width=round(4.2*K))
-    fst = F(AR_BLACK, 32); u, dn, w = ink('عداد مفتوح', fst)
+    sd.rounded_rectangle((2*K, 2*K, (sw_ - 2)*K, (sh_ - 2)*K), radius=6*K, outline=RED + (255,), width=round(3.2*K))
+    sd.rounded_rectangle((11*K, 11*K, (sw_ - 11)*K, (sh_ - 11)*K), radius=5*K, outline=RED + (255,), width=round(5.2*K))
+    fst = F(AR_BLACK, 42); u, dn, w = ink('عداد مفتوح', fst)
     sd.text((sw_/2*K, (sh_/2 + (u - dn)/2)*K), 'عداد مفتوح', font=fst.real, fill=RED + (255,), anchor='ms', direction='rtl', language='ar')
     rng = np.random.default_rng(7); A = np.asarray(st).astype(np.float32)
     noise = rng.random(A.shape[:2]); speck = Image.fromarray((noise > 0.993).astype(np.uint8)*255).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(1))
     wear = np.clip(0.86 + 0.14*rng.random(A.shape[:2]), 0, 1)*(1 - np.asarray(speck)/255*0.9)
     A[..., 3] *= wear; st = Image.fromarray(A.astype(np.uint8)).rotate(-6, resample=Image.BICUBIC, expand=True)
-    sx, sy = cx - 34, y + sh_/2 + 6
+    sx, sy = cx - 6, y + sh_/2 + 4
     cv.alpha_composite(st.filter(ImageFilter.GaussianBlur(0.3*K)), (round(sx*K - st.width/2), round(sy*K - st.height/2)))
     # blue ballpoint signature under the stamp, its tail sweeping right
     g, gd = layer(); BLUE = (28, 52, 150)
     def bez(p0, p1, p2, p3, n=40):
         return [((1-t)**3*p0[0] + 3*(1-t)**2*t*p1[0] + 3*(1-t)*t*t*p2[0] + t**3*p3[0],
                  (1-t)**3*p0[1] + 3*(1-t)**2*t*p1[1] + 3*(1-t)*t*t*p2[1] + t**3*p3[1]) for t in np.linspace(0, 1, n)]
-    ox, oy = cx + 6, sy + 70
-    fsig = F(os.path.join(sys.argv[1], 'fonts', 'MrsSaintDelafield-Regular.ttf'), 44)
-    gd.text((ox, oy), 'CallRent', font=fsig, fill=BLUE + (235,), anchor='ms', direction='ltr', language='en')
-    gd.line(bez((ox - 92, oy + 12), (ox - 20, oy + 2), (ox + 60, oy + 16), (ox + 108, oy - 2)), fill=BLUE + (210,), width=2, joint='curve')
-    cv.alpha_composite(g.filter(ImageFilter.GaussianBlur(0.35*K)))
-    thanks = oy + 22
-    c = terms(cv, 1182, False)
+    ox, oy = cx + 62, sy + 47                                 # signed across the stamp's lower right corner
+    sg = signature(sys.argv[1], 'S. Aydin', 50*K, BLUE, seed=3); sg = sg.crop(sg.getbbox())
+    cv.alpha_composite(sg, (round(ox*K - sg.width/2), round(oy*K - sg.height/2)))
+    thanks = oy + sg.height/K/2
+    c = terms(cv, 1182, False, text='عداد مفتوح - وفق الشروط والأحكام')
     footer(cv, False)
     print('okm-c: title 320 -', round(end), '| receipt', top, '-', round(thanks), '| chip 1182 -', round(c))
     return cv
