@@ -145,7 +145,35 @@ def cover_ring(col, icon, icol):
     return im.convert('RGB')
 
 
-STYLES = {'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
+def cover_gauge(col, icon, icol):
+    """A dashboard gauge: brand teal-navy field, the section colour as a glowing 270-degree arc (light to full),
+    fine white tick marks round it like a speedometer, white icon in the middle."""
+    im = backdrop(); cx = cy = S/2; R = S*0.37; wd = int(S*0.055)
+    a0, a1 = 135, 405                                          # PIL degrees, clockwise from 3 o'clock; gap at the bottom
+    box = (cx - R, cy - R, cx + R, cy + R)
+    g = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(g).arc(box, a0, a1, fill=col + (200,), width=int(wd*1.6))
+    im.alpha_composite(g.filter(ImageFilter.GaussianBlur(40)))
+    ImageDraw.Draw(im).arc(box, a0, a1, fill=(255, 255, 255, 38), width=wd)          # faint track
+    c = np.array(col, np.float32); lay = Image.new('RGBA', im.size, (0, 0, 0, 0)); ld = ImageDraw.Draw(lay)
+    n = 90
+    for i in range(n):                                         # the arc, lightening along its sweep
+        t = i/(n - 1); cc = np.clip(c*(0.85 + 0.45*t) + 22*t, 0, 255).astype(int)
+        s_ = a0 + (a1 - a0)*i/n; e_ = a0 + (a1 - a0)*(i + 1.6)/n
+        ld.arc(box, s_, min(e_, a1), fill=tuple(cc) + (255,), width=wd)
+    im.alpha_composite(lay)
+    d = ImageDraw.Draw(im); rt0, rt1, rt2 = R + wd*0.95, R + wd*1.55, R + wd*1.9
+    for k in range(28):                                        # speedometer ticks just outside the arc
+        ang = math.radians(a0 + (a1 - a0)*k/27); long_ = k % 3 == 0
+        r1 = rt2 if long_ else rt1
+        d.line([(cx + rt0*math.cos(ang), cy + rt0*math.sin(ang)), (cx + r1*math.cos(ang), cy + r1*math.sin(ang))],
+               fill=(255, 255, 255, 230 if long_ else 150), width=10 if long_ else 6)
+    ang = math.radians(a1); d.ellipse((cx + R*math.cos(ang) - wd*0.42, cy + R*math.sin(ang) - wd*0.42,
+                                       cx + R*math.cos(ang) + wd*0.42, cy + R*math.sin(ang) + wd*0.42), fill=(255, 255, 255, 255))
+    put_icon(im, icon, (255, 255, 255), 0.30)
+    return im.convert('RGB')
+
+
+STYLES = {'gauge': cover_gauge, 'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
 
 
 def mockup(shot, covers, out, xs=(398, 644, 890, 1136), cy=1625, ly=1765):
