@@ -14,7 +14,7 @@ SECTIONS = [   # file, label, colour, icon, icon colour
     ('idea', 'عندك فكرة', (46, 104, 150), 'lightbulb', (255, 255, 255)),
     ('news', 'أخبار السيارات', (244, 141, 87), 'newspaper', NAVY),
     ('services', 'من خدماتنا', (22, 44, 74), 'car_rental', (255, 255, 255)),
-    ('fleet', 'أسطولنا', (226, 230, 236), 'directions_car', NAVY),
+    ('fleet', 'أسطولنا', (38, 160, 214), 'directions_car', (255, 255, 255)),   # the logo's light-blue line colour
 ]
 
 

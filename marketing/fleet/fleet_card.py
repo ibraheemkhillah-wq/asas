@@ -66,8 +66,41 @@ def card(cid):
     return im.convert('RGB')
 
 
+def card_float(cid):
+    """Light version: no box - the name floats on the sky in white with a soft shadow, the specs sit in four small
+    white pills; the sky and clouds stay visible."""
+    make, model, year, fuel, gear, seats, bags = CARS[cid]
+    im = Image.open(os.path.join(HERE, 'src', cid + '.png')).convert('RGB').resize((W*K, H*K), Image.LANCZOS).convert('RGBA')
+    cx = W/2*K; sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sd = ImageDraw.Draw(sh); lay = Image.new('RGBA', im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    fm = FT(OX8, 30); spc = '  '.join(make); u, dn, w = ink(d, spc, fm); y = 218*K + u
+    for dd in (sd, d): dd.text((cx, y + (6*K if dd is sd else 0)), spc, font=fm, fill=((8, 26, 55, 235) if dd is sd else WHITE + (255,)), anchor='ms')
+    y += dn
+    fM = FT(OX8, 104); uM, dM, wM = ink(d, model, fM); fy = FT(OX8, 32); uy, dy, wy = ink(d, year, fy)
+    cw, ch = wy + 38*K, uy + dy + 24*K; gap = 24*K; xm = cx - (wM + gap + cw)/2; base = y + 22*K + uM
+    sd.text((xm, base + 8*K), model, font=fM, fill=(10, 30, 60, 170), anchor='ls'); d.text((xm, base), model, font=fM, fill=WHITE, anchor='ls')
+    chx = xm + wM + gap; chy = base - uM/2 - ch/2 + 4*K
+    sd.rounded_rectangle((chx, chy + 6*K, chx + cw, chy + ch + 6*K), radius=ch/2, fill=(10, 30, 60, 110))
+    d.rounded_rectangle((chx, chy, chx + cw, chy + ch), radius=ch/2, fill=ORANGE); d.text((chx + cw/2, chy + ch/2), year, font=fy, fill=WHITE, anchor='mm')
+    y = base + dM + 34*K
+    specs = [('local_gas_station', fuel), ('auto_transmission', gear), ('airline_seat_recline_normal', seats), ('luggage', bags)]
+    fl = FT(KUFI, 22); isz = 30*K; ph = 62*K; items = []
+    for ic, lab in specs:
+        u, dn, w = ink(d, lab, fl, True); items.append((ic, lab, u, dn, w, w + isz + 12*K + 40*K))
+    tot = sum(i[5] for i in items) + 14*K*3; x = cx + tot/2
+    for ic, lab, u, dn, w, pw in items:                        # right to left
+        x0 = x - pw
+        sd.rounded_rectangle((x0, y + 6*K, x, y + ph + 6*K), radius=ph/2, fill=(10, 30, 60, 90))
+        d.rounded_rectangle((x0, y, x, y + ph), radius=ph/2, fill=(255, 255, 255, 236))
+        g = icon(ic, isz, ORANGE); lay.alpha_composite(g, (round(x - 20*K - g.width), round(y + ph/2 - g.height/2)))
+        d.text((x - 20*K - isz - 12*K, y + ph/2 + (u - dn)/2), lab, font=fl, fill=NAVY + (255,), anchor='rs', direction='rtl', language='ar')
+        x = x0 - 14*K
+    im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(10*K))); im.alpha_composite(lay)
+    print(cid, 'float: make top 218 | pills bottom', round((y + ph)/K), '| pills width', round(tot/K))
+    return im.convert('RGB')
+
+
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
     ids = sys.argv[3].split(',') if len(sys.argv) > 3 else list(CARS)
     for cid in ids:
-        card(cid).save(os.path.join(out, f'fleet-{cid}.png'), optimize=True)
+        card_float(cid).save(os.path.join(out, f'fleet-{cid}.png'), optimize=True)
