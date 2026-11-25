@@ -2,7 +2,7 @@
 Section colour as a soft radial field, a fine inner ring, and a Material Symbols (rounded) icon in the middle.
 Also writes mockup.png: the covers placed on a profile screenshot (pass its path as the 2nd argument).
 usage: python3 highlights.py <out dir> [profile screenshot]"""
-import sys, os
+import sys, os, math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -16,20 +16,39 @@ SECTIONS = [   # file, label, colour, icon, icon colour
 ]
 
 
+TOP, BOT = (33, 120, 155), (30, 62, 96)            # the profile picture's teal-blue to navy
+
+
+def backdrop(seed=1):
+    """The profile picture's field: diagonal teal-to-navy gradient with a fan of fine light-blue lines."""
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
+    t = np.clip(((S - xx)*0.35 + yy)/(S*1.25), 0, 1)[..., None]
+    px = np.array(TOP, np.float32)*(1 - t) + np.array(BOT, np.float32)*t
+    im = Image.fromarray(px.astype(np.uint8), 'RGB').convert('RGBA')
+    rng = np.random.default_rng(seed); lay = Image.new('RGBA', (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    fx, fy = S*1.02, S*0.70
+    for ang in np.concatenate([np.linspace(196, 232, 46), np.linspace(160, 195, 26)]):
+        ang += rng.normal(0, 0.6); r0, r1 = S*rng.uniform(0.15, 0.45), S*rng.uniform(0.9, 1.4)
+        a_ = math.radians(ang); al = int(rng.uniform(110, 220) if ang > 196 else rng.uniform(60, 130))
+        d.line([(fx + r0*math.cos(a_), fy + r0*math.sin(a_)), (fx + r1*math.cos(a_), fy + r1*math.sin(a_))],
+               fill=(60, 160, 240, al), width=int(rng.choice([3, 4, 5, 6])))
+    im.alpha_composite(lay.filter(ImageFilter.GaussianBlur(0.8)))
+    return im
+
+
 def cover(col, icon, icol):
-    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32); r = np.hypot(xx - S/2, yy - S*0.44)/(S*0.72)
-    c = np.array(col, np.float32); light = np.clip(c*1.18 + 18, 0, 255); dark = c*0.78
-    t = np.clip(r, 0, 1)[..., None]; px = light*(1 - t) + c*t*1.0
-    px = np.where(t > 0.75, px*(1 - (t - 0.75)*0.9) + dark*((t - 0.75)*0.9), px)
-    im = Image.fromarray(px.clip(0, 255).astype(np.uint8), 'RGB').convert('RGBA')
-    d = ImageDraw.Draw(im); rr = S*0.405                         # fine ring inside the visible circle
-    d.ellipse((S/2 - rr, S/2 - rr, S/2 + rr, S/2 + rr), outline=icol + (90,), width=10)
+    im = backdrop()
+    acc = tuple(min(255, int(v*1.45)) for v in col) if col == (46, 104, 150) else col   # the idea blue, lifted off the navy
+    d = ImageDraw.Draw(im); rr = S*0.415                         # section-colour ring inside the visible circle
+    d.ellipse((S/2 - rr, S/2 - rr, S/2 + rr, S/2 + rr), outline=acc + (255,), width=40)
     ic = Image.open(os.path.join(HERE, 'icons', icon + '.png')).convert('RGBA'); a = ic.split()[3]
-    sz = round(S*0.42); a = a.crop(a.getbbox()); k = sz/max(a.size); a = a.resize((round(a.width*k), round(a.height*k)), Image.LANCZOS)
+    sz = round(S*0.40); a = a.crop(a.getbbox()); k = sz/max(a.size); a = a.resize((round(a.width*k), round(a.height*k)), Image.LANCZOS)
     pos = ((S - a.width)//2, (S - a.height)//2)
-    sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sh.paste((0, 0, 0, 70), (pos[0], pos[1] + 18), a)
-    im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(22)))
-    im.paste(icol, pos, a)
+    sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sh.paste((0, 0, 0, 90), (pos[0], pos[1] + 16), a)
+    im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(24)))
+    im.paste((255, 255, 255), pos, a)
+    # the logo's corner: a small right triangle in the section colour, tucked under the icon's lower left
+
     return im.convert('RGB')
 
 
