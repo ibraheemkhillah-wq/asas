@@ -109,7 +109,25 @@ def cover_split(col, icon, icol):
     return im.convert('RGB')
 
 
-STYLES = {'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
+def cover_inverse(col, icon, icol):
+    """The medallion inverted: the section colour (shaded, with the fine-line fan) fills the outside, and the brand's
+    teal-navy field sits in the framed disc with a white icon."""
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
+    t = np.clip(((S - xx)*0.35 + yy)/(S*1.25), 0, 1)[..., None]
+    c = np.array(col, np.float32); top = np.clip(c*1.16 + 12, 0, 255); bot = c*0.74
+    im = Image.fromarray((top*(1 - t) + bot*t).astype(np.uint8), 'RGB').convert('RGBA')
+    im.alpha_composite(fan(col=tuple(int(min(255, v*0.5 + 150)) for v in col), k=0.6))
+    R = S*0.355; cx = cy = S/2
+    g = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(g).ellipse((cx - R*1.1, cy - R*1.05, cx + R*1.1, cy + R*1.2), fill=(10, 20, 35, 120))
+    im.alpha_composite(g.filter(ImageFilter.GaussianBlur(60)))
+    m = Image.new('L', im.size, 0); ImageDraw.Draw(m).ellipse((cx - R, cy - R, cx + R, cy + R), fill=255)
+    im.paste(backdrop().convert('RGB'), (0, 0), m)
+    w = 14; ImageDraw.Draw(im).ellipse((cx - R - w*2.2, cy - R - w*2.2, cx + R + w*2.2, cy + R + w*2.2), outline=(255, 255, 255, 235), width=w)
+    put_icon(im, icon, (255, 255, 255), 0.34)
+    return im.convert('RGB')
+
+
+STYLES = {'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
 
 
 def mockup(shot, covers, out, xs=(398, 644, 890, 1136), cy=1625, ly=1765):
