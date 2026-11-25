@@ -173,7 +173,30 @@ def cover_gauge(col, icon, icol):
     return im.convert('RGB')
 
 
-STYLES = {'gauge': cover_gauge, 'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
+def cover_corner(col, icon, icol):
+    """The logo's corner: brand teal-navy field, and the section colour fills the lower-left segment, cut at 45 degrees
+    like the orange corner under the logo's R, with a fine white edge; white icon a little above centre."""
+    im = backdrop(); yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
+    k = S*0.30                                                 # cut line: y - x = k  (45 degrees, lower-left side coloured)
+    side = (yy - xx - k)/math.sqrt(2)
+    c = np.array(col, np.float32); tt = np.clip((yy - xx - k)/(S*0.9), 0, 1)[..., None]
+    fill = np.clip(c*1.2 + 14, 0, 255)*(1 - tt) + c*0.78*tt
+    m = Image.fromarray((np.clip(side/1.5 + 0.5, 0, 1)*255).astype(np.uint8))
+    sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sh.putalpha(Image.fromarray((np.clip((side + 60)/60, 0, 1)*110).astype(np.uint8)).filter(ImageFilter.GaussianBlur(30)))
+    im.alpha_composite(sh)
+    lay = Image.fromarray(fill.astype(np.uint8), 'RGB').convert('RGBA'); lay.alpha_composite(fan(col=tuple(int(min(255, v*0.5 + 150)) for v in col), k=0.35))
+    im.paste(lay.convert('RGB'), (0, 0), m)
+    d = ImageDraw.Draw(im); L = S*1.5
+    d.line([(-L, -L + k), (L, L + k)], fill=(255, 255, 255, 220), width=12)
+    ic = Image.open(os.path.join(HERE, 'icons', icon + '.png')).convert('RGBA'); a = ic.split()[3]
+    sz = round(S*0.34); a = a.crop(a.getbbox()); kk = sz/max(a.size); a = a.resize((round(a.width*kk), round(a.height*kk)), Image.LANCZOS)
+    pos = (round(S*0.56 - a.width/2), round(S*0.42 - a.height/2))
+    shd = Image.new('RGBA', im.size, (0, 0, 0, 0)); shd.paste((0, 0, 0, 100), (pos[0], pos[1] + 18), a)
+    im.alpha_composite(shd.filter(ImageFilter.GaussianBlur(26))); im.paste((255, 255, 255), pos, a)
+    return im.convert('RGB')
+
+
+STYLES = {'corner': cover_corner, 'gauge': cover_gauge, 'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
 
 
 def mockup(shot, covers, out, xs=(398, 644, 890, 1136), cy=1625, ly=1765):
