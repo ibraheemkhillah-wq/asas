@@ -1,6 +1,6 @@
 """Fleet stories: a spec card (make, model, year, fuel, gearbox, seats, luggage) over each 1080x1920 fleet photo,
 set in the sky above the shop sign. Output 2160x3840.
-usage: python3 fleet_card.py <brand-kit dir> <out dir> [ids]"""
+usage: python3 fleet_card.py <brand-kit dir> <out dir> [ids] [styles: float,glass,line,tag]"""
 import sys, os
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__)); KIT = sys.argv[1]
@@ -99,8 +99,114 @@ def card_float(cid):
     return im.convert('RGB')
 
 
+def _base(cid):
+    return Image.open(os.path.join(HERE, 'src', cid + '.png')).convert('RGB').resize((W*K, H*K), Image.LANCZOS).convert('RGBA')
+
+
+def _specs(cid):
+    make, model, year, fuel, gear, seats, bags = CARS[cid]
+    return make, model, year, [('local_gas_station', fuel), ('auto_transmission', gear), ('airline_seat_recline_normal', seats), ('luggage', bags)]
+
+
+def _shadow(im, box, r, a=90, blur=18, dy=10):
+    sh = Image.new('RGBA', im.size, (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle((box[0], box[1] + dy*K, box[2], box[3] + dy*K), radius=r, fill=(8, 26, 55, a))
+    im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(blur*K)))
+
+
+def _spec_row(im, d, specs, y, cx, width, icol, tcol, divcol, isz=34, fs=22):
+    """four columns right to left: icon above label, thin dividers. Returns bottom (px)."""
+    fl = FT(KUFI, fs); colw = width/4; bot = y
+    for i, (ic, lab) in enumerate(specs):
+        mx = cx + width/2 - colw*(i + 0.5)
+        g = icon(ic, isz*K, icol); im.alpha_composite(g, (round(mx - g.width/2), round(y)))
+        u, dn, w = ink(d, lab, fl, True); b = y + g.height + 14*K + u
+        d.text((mx, b), lab, font=fl, fill=tcol, anchor='ms', direction='rtl', language='ar'); bot = max(bot, b + dn)
+        if i: d.line([(mx + colw/2, y + 4*K), (mx + colw/2, b + dn - 2*K)], fill=divcol, width=2*K)
+    return bot
+
+
+def card_glass(cid):
+    """1. Frosted glass: a light, see-through white panel over the sky; navy type, orange icons."""
+    make, model, year, specs = _specs(cid); im = _base(cid)
+    x0, y0, x1, y1 = 130*K, 196*K, 950*K, 452*K; r = 40*K
+    _shadow(im, (x0, y0, x1, y1), r, a=60)
+    blur = im.crop((x0, y0, x1, y1)).filter(ImageFilter.GaussianBlur(26*K)); m = Image.new('L', blur.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, blur.width - 1, blur.height - 1), radius=r, fill=255); im.paste(blur, (x0, y0), m)
+    ov = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(ov).rounded_rectangle((x0, y0, x1, y1), radius=r, fill=(255, 255, 255, 150), outline=(255, 255, 255, 230), width=3*K)
+    im.alpha_composite(ov); d = ImageDraw.Draw(im); cx = W/2*K
+    fm = FT(OX8, 24); sp = '  '.join(make); u, dn, w = ink(d, sp, fm); y = y0 + 30*K + u
+    d.text((cx, y), sp, font=fm, fill=(90, 110, 135), anchor='ms'); y += dn
+    fM = FT(OX8, 72); uM, dM, wM = ink(d, model, fM); fy = FT(OX8, 28); uy, dy_, wy = ink(d, year, fy)
+    cw, ch = wy + 34*K, uy + dy_ + 20*K; gap = 20*K; xm = cx - (wM + gap + cw)/2; base = y + 16*K + uM
+    d.text((xm, base), model, font=fM, fill=NAVY, anchor='ls')
+    chx = xm + wM + gap; chy = base - uM/2 - ch/2 + 4*K
+    d.rounded_rectangle((chx, chy, chx + cw, chy + ch), radius=ch/2, fill=ORANGE); d.text((chx + cw/2, chy + ch/2), year, font=fy, fill=WHITE, anchor='mm')
+    y = base + dM + 24*K
+    bot = _spec_row(im, d, specs, y, cx, (x1 - x0) - 80*K, ORANGE, NAVY, (150, 172, 196))
+    print(cid, 'glass card', y0//K, '-', y1//K, '| content bottom', round(bot/K))
+    return im.convert('RGB')
+
+
+def card_line(cid):
+    """2. Minimal: no box at all - white type straight on the sky, an orange hairline, and the specs as one line of
+    white icons and words."""
+    make, model, year, specs = _specs(cid); im = _base(cid)
+    sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sd = ImageDraw.Draw(sh); lay = Image.new('RGBA', im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    cx = W/2*K; SH = (8, 26, 55, 200)
+    fM = FT(OX8, 96); title = model; uM, dM, wM = ink(d, title, fM)
+    fm = FT(OX8, 28); sp = '  '.join(make) + '   ·   ' + year; u, dn, w = ink(d, sp, fm)
+    y = 230*K + u
+    sd.text((cx, y + 5*K), sp, font=fm, fill=SH, anchor='ms'); d.text((cx, y), sp, font=fm, fill=WHITE, anchor='ms')
+    base = y + dn + 22*K + uM
+    sd.text((cx, base + 7*K), title, font=fM, fill=SH, anchor='ms'); d.text((cx, base), title, font=fM, fill=WHITE, anchor='ms')
+    y = base + dM + 26*K
+    d.rounded_rectangle((cx - 60*K, y, cx + 60*K, y + 5*K), radius=3*K, fill=ORANGE + (255,)); y += 5*K + 28*K
+    fl = FT(KUFI, 24); isz = 30*K; parts = []
+    for ic, lab in specs:
+        uu, dd_, ww = ink(d, lab, fl, True); parts.append((ic, lab, uu, dd_, ww))
+    gap = 46*K; tot = sum(p_[4] + isz + 10*K for p_ in parts) + gap*3; x = cx + tot/2
+    for i, (ic, lab, uu, dd_, ww) in enumerate(parts):
+        g = icon(ic, isz, WHITE); gs = icon(ic, isz, (8, 26, 55))
+        sh.alpha_composite(gs, (round(x - g.width), round(y + 4*K))); lay.alpha_composite(g, (round(x - g.width), round(y)))
+        tx = x - isz - 10*K; b = y + isz/2 + (uu - dd_)/2
+        sd.text((tx, b + 4*K), lab, font=fl, fill=SH, anchor='rs', direction='rtl', language='ar')
+        d.text((tx, b), lab, font=fl, fill=WHITE, anchor='rs', direction='rtl', language='ar')
+        x = tx - ww - gap
+        if i < 3: d.ellipse((x + gap/2 - 5*K, y + isz/2 - 5*K, x + gap/2 + 5*K, y + isz/2 + 5*K), fill=ORANGE + (255,))
+    im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(9*K))); im.alpha_composite(lay)
+    print(cid, 'line: top 230 | bottom', round((y + isz)/K))
+    return im.convert('RGB')
+
+
+def card_tag(cid):
+    """3. Brand tag: a compact white card with the logo's orange corner, navy type - like our number plate."""
+    make, model, year, specs = _specs(cid); im = _base(cid)
+    x0, y0, x1, y1 = 170*K, 200*K, 910*K, 446*K; r = 22*K
+    _shadow(im, (x0, y0, x1, y1), r, a=110, blur=16, dy=12)
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((x0, y0, x1, y1), radius=r, fill=(255, 255, 255, 250))
+    t = 34*K; d.polygon([(x0 + 22*K, y0 + 22*K), (x0 + 22*K + t, y0 + 22*K), (x0 + 22*K, y0 + 22*K + t)], fill=ORANGE)   # logo corner, top left
+    cx = W/2*K
+    fm = FT(OX8, 24); sp = '  '.join(make); u, dn, w = ink(d, sp, fm); y = y0 + 28*K + u
+    d.text((cx, y), sp, font=fm, fill=(120, 135, 155), anchor='ms'); y += dn
+    fM = FT(OX8, 70); txt = model; uM, dM, wM = ink(d, txt, fM); fy = FT(OX8, 70); uy, dy_, wy = ink(d, year, fy)
+    gap = 22*K; xm = cx - (wM + gap + wy)/2; base = y + 16*K + uM
+    d.text((xm, base), txt, font=fM, fill=NAVY, anchor='ls'); d.text((xm + wM + gap, base), year, font=fy, fill=ORANGE, anchor='ls')
+    y = base + dM + 20*K
+    d.line([(x0 + 60*K, y), (x1 - 60*K, y)], fill=(222, 228, 236), width=2*K); y += 20*K
+    bot = _spec_row(im, d, specs, y, cx, (x1 - x0) - 70*K, ORANGE, NAVY, (222, 228, 236), isz=32, fs=21)
+    print(cid, 'tag card', y0//K, '-', y1//K, '| content bottom', round(bot/K))
+    return im.convert('RGB')
+
+
+STYLES = {'glass': card_glass, 'line': card_line, 'tag': card_tag, 'float': card_float}
+
+
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
     ids = sys.argv[3].split(',') if len(sys.argv) > 3 else list(CARS)
-    for cid in ids:
-        card_float(cid).save(os.path.join(out, f'fleet-{cid}.png'), optimize=True)
+    styles = sys.argv[4].split(',') if len(sys.argv) > 4 else ['float']
+    for st in styles:
+        for cid in ids:
+            STYLES[st](cid).save(os.path.join(out, f'fleet-{cid}-{st}.png' if len(styles) > 1 else f'fleet-{cid}.png'), optimize=True)
