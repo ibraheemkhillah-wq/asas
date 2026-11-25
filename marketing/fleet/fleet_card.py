@@ -11,8 +11,20 @@ FT = lambda n, s: ImageFont.truetype(os.path.join(KIT, 'fonts', n), round(s*K))
 OX8, OX6, KUFI = 'Oxanium-800.ttf', 'Oxanium-600.ttf', 'NotoKufiArabic-ExtraBold.ttf'
 
 # id: (make, model, year, fuel, gearbox, seats, bags)
-CARS = {
+CARS = {   # make, model, year, fuel, gearbox, seats, luggage  - model read from the photo; the rest to be confirmed
+    '01': ('CHERY', 'Omoda 5', '2024', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '02': ('RENAULT', 'Megane', '2023', 'ديزل', 'أوتوماتيك', '5 مقاعد', '3 حقائب'),
+    '03': ('HYUNDAI', 'Bayon', '2023', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '04': ('RENAULT', 'Clio', '2023', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
     '05': ('RENAULT', 'Clio', '2024', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '06': ('FIAT', 'Egea', '2023', 'ديزل', 'أوتوماتيك', '5 مقاعد', '3 حقائب'),
+    '07': ('HYUNDAI', 'i20', '2023', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '08': ('HYUNDAI', 'i20', '2024', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '09': ('OPEL', 'Mokka', '2023', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '10': ('CHERY', 'Omoda 5', '2024', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '11': ('DACIA', 'Sandero Stepway', '2023', 'بنزين', 'أوتوماتيك', '5 مقاعد', 'حقيبتان'),
+    '12': ('RENAULT', 'Taliant', '2023', 'بنزين', 'أوتوماتيك', '5 مقاعد', '3 حقائب'),
+    '13': ('CHERY', 'Tiggo 7 Pro', '2024', 'بنزين', 'أوتوماتيك', '5 مقاعد', '3 حقائب'),
 }
 
 
@@ -138,8 +150,13 @@ def card_glass(cid):
     im.alpha_composite(ov); d = ImageDraw.Draw(im); cx = W/2*K
     fm = FT(OX8, 24); sp = '  '.join(make); u, dn, w = ink(d, sp, fm); y = y0 + 30*K + u
     d.text((cx, y), sp, font=fm, fill=(90, 110, 135), anchor='ms'); y += dn
-    fM = FT(OX8, 72); uM, dM, wM = ink(d, model, fM); fy = FT(OX8, 28); uy, dy_, wy = ink(d, year, fy)
-    cw, ch = wy + 34*K, uy + dy_ + 20*K; gap = 20*K; xm = cx - (wM + gap + cw)/2; base = y + 16*K + uM
+    fy = FT(OX8, 28); uy, dy_, wy = ink(d, year, fy); cw, ch = wy + 34*K, uy + dy_ + 20*K; gap = 20*K; sz = 72
+    while True:                                                # long names (Sandero Stepway) step down to fit
+        fM = FT(OX8, sz); uM, dM, wM = ink(d, model, fM)
+        if wM + gap + cw <= (x1 - x0) - 100*K or sz <= 44: break
+        sz -= 2
+    uM, dM = ink(d, 'Clio', FT(OX8, 72))[:2] if sz < 72 else (uM, dM)    # keep the row height of the 72 size
+    xm = cx - (wM + gap + cw)/2; base = y + 16*K + uM
     d.text((xm, base), model, font=fM, fill=NAVY, anchor='ls')
     chx = xm + wM + gap; chy = base - uM/2 - ch/2 + 4*K
     d.rounded_rectangle((chx, chy, chx + cw, chy + ch), radius=ch/2, fill=ORANGE); d.text((chx + cw/2, chy + ch/2), year, font=fy, fill=WHITE, anchor='mm')
@@ -248,7 +265,7 @@ STYLES = {'glass2': card_glass2, 'glass': card_glass, 'line': card_line, 'tag': 
 if __name__ == '__main__':
     out = sys.argv[2]; os.makedirs(out, exist_ok=True)
     ids = sys.argv[3].split(',') if len(sys.argv) > 3 else list(CARS)
-    styles = sys.argv[4].split(',') if len(sys.argv) > 4 else ['float']
+    styles = sys.argv[4].split(',') if len(sys.argv) > 4 else ['glass']   # glass = the approved card
     for st in styles:
         for cid in ids:
             STYLES[st](cid).save(os.path.join(out, f'fleet-{cid}-{st}.png' if len(styles) > 1 else f'fleet-{cid}.png'), optimize=True)
