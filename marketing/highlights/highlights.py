@@ -13,6 +13,7 @@ SECTIONS = [   # file, label, colour, icon, icon colour
     ('care', 'اعتنِ بسيارتك', (22, 138, 128), 'build', (255, 255, 255)),
     ('idea', 'عندك فكرة', (46, 104, 150), 'lightbulb', (255, 255, 255)),
     ('news', 'أخبار السيارات', (244, 141, 87), 'newspaper', NAVY),
+    ('services', 'من خدماتنا', (22, 44, 74), 'car_rental', (255, 255, 255)),
 ]
 
 
