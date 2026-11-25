@@ -38,15 +38,23 @@ def backdrop(seed=1):
 
 def cover(col, icon, icol):
     im = backdrop()
-    acc = tuple(min(255, int(v*1.45)) for v in col) if col == (46, 104, 150) else col   # the idea blue, lifted off the navy
-    d = ImageDraw.Draw(im); rr = S*0.415                         # section-colour ring inside the visible circle
-    d.ellipse((S/2 - rr, S/2 - rr, S/2 + rr, S/2 + rr), outline=acc + (255,), width=40)
+    # a medallion in the section colour: soft glow, gradient disc, fine white rim
+    R = S*0.355; cx = cy = S/2
+    g = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(g).ellipse((cx - R*1.12, cy - R*1.12, cx + R*1.12, cy + R*1.12), fill=col + (150,))
+    im.alpha_composite(g.filter(ImageFilter.GaussianBlur(70)))
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
+    tt = np.clip(((xx - (cx - R)) + (yy - (cy - R)))/(4*R), 0, 1)[..., None]
+    c = np.array(col, np.float32); disc = np.clip(c*1.22 + 14, 0, 255)*(1 - tt) + c*0.80*tt
+    m = Image.new('L', im.size, 0); ImageDraw.Draw(m).ellipse((cx - R, cy - R, cx + R, cy + R), fill=255)
+    im.paste(Image.fromarray(disc.astype(np.uint8), 'RGB'), (0, 0), m)
+    d = ImageDraw.Draw(im); w = 14
+    d.ellipse((cx - R - w*2.2, cy - R - w*2.2, cx + R + w*2.2, cy + R + w*2.2), outline=(255, 255, 255, 230), width=w)
     ic = Image.open(os.path.join(HERE, 'icons', icon + '.png')).convert('RGBA'); a = ic.split()[3]
-    sz = round(S*0.40); a = a.crop(a.getbbox()); k = sz/max(a.size); a = a.resize((round(a.width*k), round(a.height*k)), Image.LANCZOS)
+    sz = round(S*0.34); a = a.crop(a.getbbox()); k = sz/max(a.size); a = a.resize((round(a.width*k), round(a.height*k)), Image.LANCZOS)
     pos = ((S - a.width)//2, (S - a.height)//2)
     sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sh.paste((0, 0, 0, 90), (pos[0], pos[1] + 16), a)
     im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(24)))
-    im.paste((255, 255, 255), pos, a)
+    im.paste(icol, pos, a)
     # the logo's corner: a small right triangle in the section colour, tucked under the icon's lower left
 
     return im.convert('RGB')
