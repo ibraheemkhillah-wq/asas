@@ -1,7 +1,7 @@
 """Instagram highlight covers for the four content sections, 2160x2160 (Instagram shows the centre circle).
 Section colour as a soft radial field, a fine inner ring, and a Material Symbols (rounded) icon in the middle.
 Also writes mockup.png: the covers placed on a profile screenshot (pass its path as the 2nd argument).
-usage: python3 highlights.py <out dir> [profile screenshot] [styles: medallion,field,split]"""
+usage: python3 highlights.py <out dir> [profile screenshot] [styles, default: emblem (the approved one)]"""
 import sys, os, math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -242,7 +242,7 @@ def mockup(shot, covers, out, xs=(398, 644, 890, 1136), cy=1625, ly=1765):
 
 if __name__ == '__main__':
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
-    styles = sys.argv[3].split(',') if len(sys.argv) > 3 else ['medallion']
+    styles = sys.argv[3].split(',') if len(sys.argv) > 3 else ['emblem']
     for st in styles:
         covers = []
         for name, label, col, icon, icol in SECTIONS:
