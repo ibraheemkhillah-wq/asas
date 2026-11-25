@@ -2,6 +2,7 @@
 set in the sky above the shop sign. Output 2160x3840.
 usage: python3 fleet_card.py <brand-kit dir> <out dir> [ids] [styles: float,glass,line,tag]"""
 import sys, os
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__)); KIT = sys.argv[1]
 K = 2; W, H = 1080, 1920
@@ -200,7 +201,48 @@ def card_tag(cid):
     return im.convert('RGB')
 
 
-STYLES = {'glass': card_glass, 'line': card_line, 'tag': card_tag, 'float': card_float}
+def card_glass2(cid):
+    """Glass, refined: a brighter frosted panel with a soft top sheen; make in spaced caps, a large navy model with
+    the year chip; the four specs each in its own white tile with the icon in a soft orange circle."""
+    make, model, year, specs = _specs(cid); im = _base(cid)
+    x0, y0, x1, y1 = 120*K, 184*K, 960*K, 474*K; r = 44*K
+    _shadow(im, (x0, y0, x1, y1), r, a=70, blur=22, dy=14)
+    blur = im.crop((x0, y0, x1, y1)).filter(ImageFilter.GaussianBlur(30*K)); m = Image.new('L', blur.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, blur.width - 1, blur.height - 1), radius=r, fill=255); im.paste(blur, (x0, y0), m)
+    ov = Image.new('RGBA', (x1 - x0, y1 - y0), (0, 0, 0, 0)); od = ImageDraw.Draw(ov)
+    for i in range(ov.height):                                 # frosted white, a little brighter at the top
+        od.line([(0, i), (ov.width, i)], fill=(255, 255, 255, int(200 - 45*i/ov.height)))
+    ov.putalpha(Image.fromarray((np.asarray(ov.split()[3]).astype(np.float32)*np.asarray(m)/255).astype(np.uint8)))
+    im.alpha_composite(ov, (x0, y0))
+    ImageDraw.Draw(im).rounded_rectangle((x0, y0, x1, y1), radius=r, outline=(255, 255, 255, 255), width=3*K)
+    d = ImageDraw.Draw(im); cx = W/2*K
+    fm = FT(OX8, 22); sp = '   '.join(make); u, dn, w = ink(d, sp, fm); y = y0 + 30*K + u
+    d.text((cx, y), sp, font=fm, fill=(74, 98, 128), anchor='ms'); y += dn
+    fM = FT(OX8, 80); uM, dM, wM = ink(d, model, fM); fy = FT(OX8, 28); uy, dy_, wy = ink(d, year, fy)
+    cw, ch = wy + 36*K, uy + dy_ + 22*K; gap = 22*K; xm = cx - (wM + gap + cw)/2; base = y + 16*K + uM
+    d.text((xm, base), model, font=fM, fill=NAVY, anchor='ls')
+    chx = xm + wM + gap; chy = base - uM/2 - ch/2 + 4*K
+    d.rounded_rectangle((chx, chy, chx + cw, chy + ch), radius=ch/2, fill=ORANGE); d.text((chx + cw/2, chy + ch/2), year, font=fy, fill=WHITE, anchor='mm')
+    y = base + dM + 24*K
+    fl = FT(KUFI, 21); n = 4; g_ = 14*K; dd0 = ImageDraw.Draw(im)
+    U = max(ink(dd0, l_, fl, True)[0] for _, l_ in specs); Dn = max(ink(dd0, l_, fl, True)[1] for _, l_ in specs)   # one baseline for all four
+    tw = ((x1 - x0) - 2*34*K - (n - 1)*g_)/n; th = 16*K + 42*K + 12*K + U + Dn + 16*K; tx = x1 - 34*K
+    for ic, lab in specs:                                      # right to left
+        a0 = tx - tw
+        sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(sh).rounded_rectangle((a0, y + 4*K, tx, y + th + 4*K), radius=22*K, fill=(8, 26, 55, 40))
+        im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(6*K)))
+        d = ImageDraw.Draw(im); d.rounded_rectangle((a0, y, tx, y + th), radius=22*K, fill=(255, 255, 255, 255))
+        mx = (a0 + tx)/2; cr = 21*K; cy_ = y + 16*K + cr
+        d.ellipse((mx - cr, cy_ - cr, mx + cr, cy_ + cr), fill=(253, 235, 224))
+        gi = icon(ic, 26*K, ORANGE); im.alpha_composite(gi, (round(mx - gi.width/2), round(cy_ - gi.height/2)))
+        d = ImageDraw.Draw(im)
+        d.text((mx, cy_ + cr + 12*K + U), lab, font=fl, fill=NAVY, anchor='ms', direction='rtl', language='ar')
+        bot = cy_ + cr + 12*K + U + Dn; tx = a0 - g_
+    print(cid, 'glass2 card', y0//K, '-', y1//K, '| tiles', round(y/K), '-', round((y + th)/K), '| label bottom', round(bot/K))
+    return im.convert('RGB')
+
+
+STYLES = {'glass2': card_glass2, 'glass': card_glass, 'line': card_line, 'tag': card_tag, 'float': card_float}
 
 
 if __name__ == '__main__':
