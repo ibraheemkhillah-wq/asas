@@ -196,7 +196,35 @@ def cover_corner(col, icon, icol):
     return im.convert('RGB')
 
 
-STYLES = {'corner': cover_corner, 'gauge': cover_gauge, 'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
+def cover_emblem(col, icon, icol):
+    """A car badge: brand teal-navy field; a polished chrome bezel round a glossy enamel disc in the section colour;
+    white icon, softly embossed."""
+    im = backdrop(); cx = cy = S/2; Ro, Ri = S*0.385, S*0.335
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32); rr = np.hypot(xx - cx, yy - cy); th = np.arctan2(yy - cy, xx - cx)
+    g = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(g).ellipse((cx - Ro, cy - Ro + 40, cx + Ro, cy + Ro + 60), fill=(5, 12, 25, 170))
+    im.alpha_composite(g.filter(ImageFilter.GaussianBlur(50)))
+    # chrome: brightness swings round the ring (two highlights), plus a radial bevel
+    rad = np.clip((rr - Ri)/(Ro - Ri), 0, 1); bevel = 1 - np.abs(rad - 0.5)*1.2
+    sw = 0.55 + 0.45*np.cos(2*(th + 0.9))**2
+    v = np.clip(120 + 125*sw*bevel, 0, 255)
+    chrome = np.dstack([v*0.96, v*0.98, v*1.02]).clip(0, 255)
+    m = Image.fromarray(((rr <= Ro) & (rr >= Ri - 2)).astype(np.uint8)*255).filter(ImageFilter.GaussianBlur(1.5))
+    im.paste(Image.fromarray(chrome.astype(np.uint8), 'RGB'), (0, 0), m)
+    # enamel: section colour, deeper at the rim, glossy dome highlight at the top
+    c = np.array(col, np.float32); rn = np.clip(rr/Ri, 0, 1)[..., None]
+    en = np.clip(c*(1.18 - 0.45*rn**2) + 10, 0, 255)
+    gl = np.clip(1 - np.hypot((xx - cx)/(Ri*0.85), (yy - (cy - Ri*0.42))/(Ri*0.45)), 0, 1)[..., None]**1.5
+    en = en*(1 - gl*0.35) + 255*gl*0.35
+    m2 = Image.fromarray((rr < Ri).astype(np.uint8)*255).filter(ImageFilter.GaussianBlur(1.5))
+    im.paste(Image.fromarray(en.astype(np.uint8), 'RGB'), (0, 0), m2)
+    d = ImageDraw.Draw(im)
+    d.ellipse((cx - Ri, cy - Ri, cx + Ri, cy + Ri), outline=(40, 40, 48, 160), width=6)       # seam between bezel and enamel
+    d.ellipse((cx - Ro, cy - Ro, cx + Ro, cy + Ro), outline=(30, 35, 45, 140), width=5)
+    put_icon(im, icon, (255, 255, 255), 0.30)
+    return im.convert('RGB')
+
+
+STYLES = {'emblem': cover_emblem, 'corner': cover_corner, 'gauge': cover_gauge, 'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
 
 
 def mockup(shot, covers, out, xs=(398, 644, 890, 1136), cy=1625, ly=1765):
