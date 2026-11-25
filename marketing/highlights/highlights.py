@@ -127,7 +127,25 @@ def cover_inverse(col, icon, icol):
     return im.convert('RGB')
 
 
-STYLES = {'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
+def cover_ring(col, icon, icol):
+    """Brand teal-navy field throughout; the section colour is a bold ring round the centre disc (soft glow,
+    light-to-deep gradient, fine white rims), white icon in the middle."""
+    im = backdrop(); cx = cy = S/2; Ro, Ri = S*0.40, S*0.335
+    g = Image.new('RGBA', im.size, (0, 0, 0, 0)); ImageDraw.Draw(g).ellipse((cx - Ro*1.05, cy - Ro*1.05, cx + Ro*1.05, cy + Ro*1.05), outline=col + (170,), width=int(S*0.06))
+    im.alpha_composite(g.filter(ImageFilter.GaussianBlur(45)))
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32); rr = np.hypot(xx - cx, yy - cy)
+    tt = np.clip(((xx - (cx - Ro)) + (yy - (cy - Ro)))/(4*Ro), 0, 1)[..., None]
+    c = np.array(col, np.float32); ringc = np.clip(c*1.25 + 16, 0, 255)*(1 - tt) + c*0.78*tt
+    m = Image.fromarray(((rr <= Ro) & (rr >= Ri)).astype(np.uint8)*255).filter(ImageFilter.GaussianBlur(1.2))
+    im.paste(Image.fromarray(ringc.astype(np.uint8), 'RGB'), (0, 0), m)
+    d = ImageDraw.Draw(im)
+    d.ellipse((cx - Ro, cy - Ro, cx + Ro, cy + Ro), outline=(255, 255, 255, 200), width=8)
+    d.ellipse((cx - Ri, cy - Ri, cx + Ri, cy + Ri), outline=(255, 255, 255, 200), width=8)
+    put_icon(im, icon, (255, 255, 255), 0.32)
+    return im.convert('RGB')
+
+
+STYLES = {'ring': cover_ring, 'inverse': cover_inverse, 'medallion': cover_medallion, 'field': cover_field, 'split': cover_split}
 
 
 def mockup(shot, covers, out, xs=(398, 644, 890, 1136), cy=1625, ly=1765):
