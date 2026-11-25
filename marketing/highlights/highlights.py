@@ -14,6 +14,7 @@ SECTIONS = [   # file, label, colour, icon, icon colour
     ('idea', 'عندك فكرة', (46, 104, 150), 'lightbulb', (255, 255, 255)),
     ('news', 'أخبار السيارات', (244, 141, 87), 'newspaper', NAVY),
     ('services', 'من خدماتنا', (22, 44, 74), 'car_rental', (255, 255, 255)),
+    ('fleet', 'أسطولنا', (226, 230, 236), 'directions_car', NAVY),
 ]
 
 
@@ -221,7 +222,7 @@ def cover_emblem(col, icon, icol):
     d = ImageDraw.Draw(im)
     d.ellipse((cx - Ri, cy - Ri, cx + Ri, cy + Ri), outline=(40, 40, 48, 160), width=6)       # seam between bezel and enamel
     d.ellipse((cx - Ro, cy - Ro, cx + Ro, cy + Ro), outline=(30, 35, 45, 140), width=5)
-    put_icon(im, icon, (255, 255, 255), 0.30)
+    put_icon(im, icon, icol if sum(col) > 600 else (255, 255, 255), 0.30)   # a light enamel takes the navy icon
     return im.convert('RGB')
 
 
