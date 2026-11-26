@@ -113,7 +113,10 @@ def card_float(cid):
 
 
 def _base(cid):
-    return Image.open(os.path.join(HERE, 'src', cid + '.png')).convert('RGB').resize((W*K, H*K), Image.LANCZOS).convert('RGBA')
+    im = Image.open(os.path.join(HERE, 'src', cid + '.png')).convert('RGB')
+    if im.width < W*K:                                         # the photos come at 1080x1920: upscale x2 and restore edge crispness
+        im = im.resize((W*K, H*K), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=2.2, percent=70, threshold=2))
+    return im.convert('RGBA')
 
 
 def _specs(cid):
