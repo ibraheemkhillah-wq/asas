@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 S = 2160
 GROUPS = [   # file, name, top colour, bottom colour, line colour
-    ('operations', 'قسم العمليات', (33, 120, 155), (30, 62, 96), (60, 160, 240)),
+    ('operations', 'قسم العمليات', (74, 82, 96), (24, 27, 34), (190, 200, 215)),   # graphite
     ('bookings', 'الحجوزات', (24, 140, 120), (12, 70, 66), (80, 220, 190)),
     ('shifts', 'المناوبات', (92, 70, 160), (40, 30, 86), (160, 140, 255)),
     ('maintenance', 'الصيانات', (196, 52, 52), (96, 20, 30), (255, 130, 120)),
