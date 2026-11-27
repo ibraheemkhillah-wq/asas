@@ -8,10 +8,10 @@ EN = {'operations': 'OPERATIONS', 'bookings': 'BOOKINGS', 'shifts': 'SHIFTS', 'm
 S = 2160
 GROUPS = [   # file, name, top colour, bottom colour, line colour  (English label = EN below)
     ('operations', 'قسم العمليات', (226, 164, 44), (150, 84, 12), (255, 222, 140)),   # gold-amber
-    ('bookings', 'الحجوزات', (24, 140, 120), (12, 70, 66), (80, 220, 190)),
+    ('bookings', 'الحجوزات', (44, 176, 226), (14, 96, 150), (170, 230, 255)),   # sky blue
     ('shifts', 'المناوبات', (92, 70, 160), (40, 30, 86), (160, 140, 255)),
     ('maintenance', 'الصيانات', (196, 52, 52), (96, 20, 30), (255, 130, 120)),
-    ('extensions', 'تمديد العقود', (196, 48, 128), (88, 18, 64), (255, 150, 210)),   # magenta
+    ('extensions', 'تمديد العقود', (24, 140, 120), (12, 70, 66), (80, 220, 190)),   # green
 ]
 
 
