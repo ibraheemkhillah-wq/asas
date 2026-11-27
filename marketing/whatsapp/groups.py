@@ -3,10 +3,11 @@
 usage: python3 groups.py <brand-kit dir> <out dir>"""
 import sys, os, math
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+EN = {'operations': 'OPERATIONS', 'bookings': 'BOOKINGS', 'shifts': 'SHIFTS', 'maintenance': 'MAINTENANCE'}
 S = 2160
-GROUPS = [   # file, name, top colour, bottom colour, line colour
-    ('operations', 'قسم العمليات', (74, 82, 96), (24, 27, 34), (190, 200, 215)),   # graphite
+GROUPS = [   # file, name, top colour, bottom colour, line colour  (English label = EN below)
+    ('operations', 'قسم العمليات', (226, 164, 44), (150, 84, 12), (255, 222, 140)),   # gold-amber
     ('bookings', 'الحجوزات', (24, 140, 120), (12, 70, 66), (80, 220, 190)),
     ('shifts', 'المناوبات', (92, 70, 160), (40, 30, 86), (160, 140, 255)),
     ('maintenance', 'الصيانات', (196, 52, 52), (96, 20, 30), (255, 130, 120)),
@@ -30,11 +31,19 @@ def field(top, bot, line, seed=1):
 if __name__ == '__main__':
     kit, out = sys.argv[1], sys.argv[2]; os.makedirs(out, exist_ok=True)
     lg = Image.open(os.path.join(kit, 'logo', 'callrent-logo-white.png')).convert('RGBA'); lg = lg.crop(lg.getbbox())
-    lw = round(S*0.66); lg = lg.resize((lw, round(lw*lg.height/lg.width)), Image.LANCZOS)
+    lw = round(S*0.60); lg = lg.resize((lw, round(lw*lg.height/lg.width)), Image.LANCZOS)
     for name, label, top, bot, line in GROUPS:
         im = field(top, bot, line)
-        pos = ((S - lg.width)//2, (S - lg.height)//2)
+        pos = ((S - lg.width)//2, round(S*0.43 - lg.height/2))
         sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); sh.paste((0, 0, 0, 90), (pos[0], pos[1] + 16), lg.split()[3])
         im.alpha_composite(sh.filter(ImageFilter.GaussianBlur(24))); im.alpha_composite(lg, pos)
+        f = ImageFont.truetype(os.path.join(kit, 'fonts', 'Oxanium-800.ttf'), 150); t = ' '.join(EN[name])
+        d = ImageDraw.Draw(im); l, tp, r, b = d.textbbox((0, 0), t, font=f, anchor='ls'); y = pos[1] + lg.height + 150 - tp
+        while r - l > S*0.70:                                  # stay inside the circle
+            f = f.font_variant(size=f.size - 4); l, tp, r, b = d.textbbox((0, 0), t, font=f, anchor='ls')
+        ln = Image.new('RGBA', im.size, (0, 0, 0, 0)); ld = ImageDraw.Draw(ln)
+        ld.text((S/2, y + 10), t, font=f, fill=(0, 0, 0, 110), anchor='ms'); im.alpha_composite(ln.filter(ImageFilter.GaussianBlur(14)))
+        d = ImageDraw.Draw(im); d.text((S/2, y), t, font=f, fill=(255, 255, 255), anchor='ms')
+        d.rounded_rectangle((S/2 - 90, pos[1] + lg.height + 66, S/2 + 90, pos[1] + lg.height + 78), radius=6, fill=(255, 255, 255, 200))
         im.convert('RGB').save(os.path.join(out, f'group-{name}.png'), optimize=True)
     print('done')
